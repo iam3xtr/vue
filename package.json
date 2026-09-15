@@ -1,0 +1,24 @@
+{
+  "name": "@iam3xtr/vue",
+  "version": "0.1.0",
+  "description": "Reusable Vue layer for 3xtr.im applications",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iam3xtr/vue.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  }
+}
