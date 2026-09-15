@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+# Least-privilege default: this workflow only ever reads repository contents
+# (its own repo, plus the read-only sibling checkout of `iam3xtr/ui` below —
+# never a write scope). `packages:write` is never requested here; it is
+# granted exclusively to release.yml's `release` job for a tag push.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          path: vue
+
+      # package.json's devDependency on @iam3xtr/ui is "file:../ui" — the
+      # same submodule-sibling layout the UI Kit uses in packages/. A
+      # standalone clone of this repo has no such sibling, so CI recreates
+      # it from iam3xtr/ui's default branch (there is no published/tagged
+      # @iam3xtr/ui version to install instead yet; once a release policy is
+      # established the pinned pair from packages/consumers/README.md in the
+      # UI Kit repo should be used here). CROSS_REPO_READ_TOKEN is a
+      # fine-grained PAT scoped to `contents: read` on iam3xtr/ui only — the
+      # default GITHUB_TOKEN cannot read a different private repository.
+      - name: "Checkout sibling @iam3xtr/ui (devDependency: file:../ui)"
+        uses: actions/checkout@v6
+        with:
+          repository: iam3xtr/ui
+          token: ${{ secrets.CROSS_REPO_READ_TOKEN }}
+          path: ui
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: vue/package-lock.json
+
+      - name: Install dependencies
+        working-directory: vue
+        run: npm ci
+
+      - name: Test (component/a11y/SSR/export/peer/pack contract)
+        working-directory: vue
+        run: npm test
+
+      - name: Inspect pack contents
+        working-directory: vue
+        run: npm pack --dry-run

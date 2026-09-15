@@ -130,3 +130,27 @@ contract) for those.
 npm install   # pulls vue/buefy/vue-router as devDependencies, @iam3xtr/ui from ../ui
 npm test      # component, accessibility, listener-cleanup, SSR and contract tests
 ```
+
+## Releasing
+
+Publish this package **after** a compatible `@iam3xtr/ui` is already
+published — this package's `peerDependencies` pin an `@iam3xtr/ui` range,
+and installing it before that range exists on the registry leaves consumers
+unable to resolve a working pair. See
+[`packages/consumers/README.md`](https://github.com/iam3xtr/trickster-ui-kit/blob/main/packages/consumers/README.md)
+in the UI Kit repo for the recommended-pair matrix, the tarball/registry
+consumer test matrix, and the partial-publish/rollback procedure.
+
+A release is cut by pushing a tag `vX.Y.Z` matching `package.json`'s
+`version` exactly — [`.github/workflows/release.yml`](.github/workflows/release.yml)
+then runs the full test suite, refuses a tag/version mismatch or an
+already-published version, and publishes to `npm.pkg.github.com` under a
+GitHub `environment: release` (configure required reviewers there so a human
+approves every publish). `packages:write` is requested only by that one job;
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml), which runs on every
+push/PR, stays `contents: read`. Both workflows also check out `iam3xtr/ui`
+into a sibling `../ui` directory (this package's `@iam3xtr/ui` devDependency
+is `file:../ui`, the same submodule-sibling layout the UI Kit uses), which
+needs its own read-only cross-repo token — see `packages/consumers/README.md`'s
+"CI, release workflow and credentials" section in the UI Kit repo for full
+credential scoping and denied-access diagnostics, not duplicated here.

@@ -1,0 +1,98 @@
+name: Release
+
+# Immutable tag/version policy: a release is cut by pushing an annotated tag
+# `vX.Y.Z` that matches `package.json`'s `version` field exactly. There is no
+# `on: push: branches` trigger — pushing to `main` never publishes by itself.
+# Publish this package only after a compatible `@iam3xtr/ui` is already on
+# the registry (this package's `peerDependencies["@iam3xtr/ui"]` pins the
+# required range) — see packages/consumers/README.md in the UI Kit repo for
+# the recommended-pair matrix and the release-order/rollback procedure.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to (re-)run the release checks for (does not bypass the already-published guard)
+        required: true
+
+# Default: read-only. `packages: write` is requested only on the `release`
+# job below (reached exclusively by a pushed `v*.*.*` tag or an explicit
+# manual dispatch that still goes through every gate). GITHUB_TOKEN is
+# scoped to this repository only and is never written to `.npmrc`,
+# `.gitmodules`, a log line, or a build artifact — `actions/setup-node`'s
+# `registry-url` wires it into a throwaway `.npmrc` for `npm publish` only,
+# via the `NODE_AUTH_TOKEN` environment variable.
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+          path: vue
+
+      # See ci.yml for why this sibling checkout exists (devDependency:
+      # file:../ui). CROSS_REPO_READ_TOKEN only needs `contents: read` on
+      # iam3xtr/ui — never packages:write, and never on this repo.
+      - name: "Checkout sibling @iam3xtr/ui (devDependency: file:../ui)"
+        uses: actions/checkout@v6
+        with:
+          repository: iam3xtr/ui
+          token: ${{ secrets.CROSS_REPO_READ_TOKEN }}
+          path: ui
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: vue/package-lock.json
+          registry-url: https://npm.pkg.github.com
+          scope: "@iam3xtr"
+
+      - name: Install dependencies
+        working-directory: vue
+        run: npm ci
+
+      - name: Test (component/a11y/SSR/export/peer/pack contract)
+        working-directory: vue
+        run: npm test
+
+      - name: Verify tag matches package.json version
+        working-directory: vue
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          version="v$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::Tag $tag does not match package.json version $version — refusing to publish a mismatched pair."
+            exit 1
+          fi
+
+      - name: Refuse to overwrite an already-published version
+        working-directory: vue
+        run: |
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          if npm view "$name@$version" version --registry https://npm.pkg.github.com >/dev/null 2>&1; then
+            echo "::error::$name@$version is already published. Publish a new version instead of re-tagging an existing one; see README.md#releasing for the rollback procedure."
+            exit 1
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish
+        working-directory: vue
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
