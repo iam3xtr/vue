@@ -43,12 +43,21 @@ jobs:
           path: vue
 
       # See ci.yml for why this sibling checkout exists (devDependency:
-      # file:../ui). CROSS_REPO_READ_TOKEN only needs `contents: read` on
-      # iam3xtr/ui — never packages:write, and never on this repo.
+      # file:../ui) and for why it's pinned to .ui-compat-ref rather than
+      # iam3xtr/ui's default branch — a release's tests must always run
+      # against the exact ui commit this vue version was verified against,
+      # not whatever ui/main happens to contain when the tag is (re-)run.
+      # CROSS_REPO_READ_TOKEN only needs `contents: read` on iam3xtr/ui —
+      # never packages:write, and never on this repo.
+      - name: Read pinned @iam3xtr/ui ref
+        id: ui-ref
+        run: echo "sha=$(cat vue/.ui-compat-ref)" >> "$GITHUB_OUTPUT"
+
       - name: "Checkout sibling @iam3xtr/ui (devDependency: file:../ui)"
         uses: actions/checkout@v6
         with:
           repository: iam3xtr/ui
+          ref: ${{ steps.ui-ref.outputs.sha }}
           token: ${{ secrets.CROSS_REPO_READ_TOKEN }}
           path: ui
 

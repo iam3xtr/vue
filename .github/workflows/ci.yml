@@ -26,16 +26,21 @@ jobs:
       # package.json's devDependency on @iam3xtr/ui is "file:../ui" — the
       # same submodule-sibling layout the UI Kit uses in packages/. A
       # standalone clone of this repo has no such sibling, so CI recreates
-      # it from iam3xtr/ui's default branch (there is no published/tagged
-      # @iam3xtr/ui version to install instead yet; once a release policy is
-      # established the pinned pair from packages/consumers/README.md in the
-      # UI Kit repo should be used here). CROSS_REPO_READ_TOKEN is a
+      # it — pinned to the exact commit recorded in .ui-compat-ref (updated
+      # in the same PR that bumps peerDependencies["@iam3xtr/ui"]), not
+      # iam3xtr/ui's moving default branch, so re-running these checks later
+      # always tests the same verified pair. CROSS_REPO_READ_TOKEN is a
       # fine-grained PAT scoped to `contents: read` on iam3xtr/ui only — the
       # default GITHUB_TOKEN cannot read a different private repository.
+      - name: Read pinned @iam3xtr/ui ref
+        id: ui-ref
+        run: echo "sha=$(cat vue/.ui-compat-ref)" >> "$GITHUB_OUTPUT"
+
       - name: "Checkout sibling @iam3xtr/ui (devDependency: file:../ui)"
         uses: actions/checkout@v6
         with:
           repository: iam3xtr/ui
+          ref: ${{ steps.ui-ref.outputs.sha }}
           token: ${{ secrets.CROSS_REPO_READ_TOKEN }}
           path: ui
 
