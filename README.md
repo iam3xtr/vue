@@ -1,16 +1,16 @@
 # @iam3xtr/vue
 
-Reusable Vue layer for 3xtr.im applications.
+Переносимый Vue-слой для приложений 3xtr.im.
 
-Owns portable Vue components and framework-level composables for UI state, focus
-management, and overlays. It depends on the visual contract from `@iam3xtr/ui` for
-tokens/theme/assets.
+Владеет переносимыми Vue-компонентами и framework-level composables для
+UI-состояний, фокуса и оверлеев. Зависит от визуального контракта
+`@iam3xtr/ui` для токенов/темы/ассетов.
 
-It must not contain API clients, Pinia stores, RBAC, product routes, fixture data,
-wizard locales, tariff or domain policy, or product-specific URLs. Those remain in each
-consuming application.
+Не должен содержать API-клиентов, Pinia stores, RBAC, продуктовых роутов,
+fixture-данных, локалей мастера, тарифной или доменной политики, либо
+product-specific URL. Всё это остаётся в каждом потребляющем приложении.
 
-## Two entry points
+## Две входные точки
 
 ```js
 import { Icon, Loader, AsyncState, ListAsyncState, CopyPre, Toolbar, ToolbarDropdown,
@@ -20,137 +20,150 @@ import { Icon, Loader, AsyncState, ListAsyncState, CopyPre, Toolbar, ToolbarDrop
 import { PageHeader, NavbarTabs, TariffSummaryCard } from "@iam3xtr/vue/navigation";
 ```
 
-- **`.` (core)** — every component and composable above needs neither a mounted Vue
-  Router nor `window`/`document` at import time. Browser-only work (a `matchMedia`
-  listener, a global `keydown` handler, `navigator.clipboard`) happens inside lifecycle
-  hooks with matching cleanup, never at module/setup top level.
-- **`./navigation`** — `PageHeader`, `NavbarTabs` and `TariffSummaryCard` each render a
-  `RouterLink` unconditionally, so importing this entry point requires Vue Router
-  installed. Kept separate so importing the core entry point (e.g. in an SSR context
-  with no router mounted yet) never pulls that requirement in. None of the three
-  hardcodes a consuming application's own route — see each component's props below.
+- **`.` (core)** — ни один компонент/composable выше не требует ни
+  смонтированного Vue Router, ни `window`/`document` во время импорта.
+  Браузерная работа (слушатель `matchMedia`, глобальный обработчик
+  `keydown`, `navigator.clipboard`) выполняется только внутри lifecycle
+  hooks с парной очисткой, никогда на верхнем уровне module/setup.
+- **`./navigation`** — `PageHeader`, `NavbarTabs` и `TariffSummaryCard`
+  безусловно рендерят `RouterLink`, поэтому импорт этой входной точки
+  требует установленный Vue Router. Вынесены отдельно, чтобы импорт core
+  входной точки (например, в SSR-контексте без смонтированного роутера)
+  никогда не тянул это требование. Ни один из трёх не хардкодит собственный
+  роут потребляющего приложения — см. пропсы каждого компонента ниже.
 
-## Setup
+## Подключение
 
 ```js
 import { createApp } from "vue";
 import Buefy from "buefy";
-import "@iam3xtr/ui/styles/theme.css"; // or .scss — see @iam3xtr/ui's README
+import "@iam3xtr/ui/styles/theme.css"; // либо .scss — см. README пакета @iam3xtr/ui
 
 const app = createApp(App);
-app.use(Buefy); // required once, by the consuming application — this package never calls app.use() itself
-app.use(router); // only if you use the ./navigation entry point
+app.use(Buefy); // требуется один раз, самим потребляющим приложением — этот пакет сам app.use() не вызывает
+app.use(router); // только если используете входную точку ./navigation
 app.mount("#app");
 ```
 
-This package never calls `createApp`/`app.use`/`createRouter` itself and ships no
-second copy of Vue, Buefy or Vue Router — `vue`, `buefy` and `@iam3xtr/ui` are required
-peer dependencies, `vue-router` an optional one (needed only for `./navigation`).
+Этот пакет никогда сам не вызывает `createApp`/`app.use`/`createRouter` и не
+поставляет вторую копию Vue, Buefy или Vue Router — `vue`, `buefy` и
+`@iam3xtr/ui` — обязательные peer-зависимости, `vue-router` — опциональная
+(нужна только для `./navigation`).
 
-## Components (core)
+## Компоненты (core)
 
-| Component | Props | Events | Slots | Needs |
+| Компонент | Пропсы | События | Слоты | Требует |
 | --- | --- | --- | --- | --- |
-| `Icon` | `name` (required), `size` (default `24`) | — | — | icon registry (see below) |
-| `Loader` | `size` (`inline"\|"section"\|"screen"`, default `"section"`), `label` (default `"Загрузка"`) | — | — | `@iam3xtr/ui` (inlines its loader-mark SVGs) |
-| `AsyncState` | `variant` (required, one of `loading/empty/no-results/error/permission-denied`), `icon`, `title`, `message` | — | default (actions) | Buefy (`b-icon`) when `icon` passed |
-| `ListAsyncState` | `loading`, `error`/`errorIcon`/`errorTitle`/`errorMessage`, `empty`/`emptyIcon`/`emptyTitle`/`emptyMessage`, `noResults`/`noResultsIcon`/`noResultsTitle`/`noResultsMessage` | — | default, `error-action`, `empty-action` | transitively Buefy via `AsyncState` |
-| `CopyPre` | `text`, `buttonLabel` (default `"Копировать"`), `copiedLabel` (default `"Скопировано!"`), `title`, `disabled` | — | default | Buefy (`b-icon`) |
-| `Toolbar` | `search`, `searchPlaceholder`, `searchAriaLabel`, `filtersActive` | `update:search`, `shortcut` | `filters`, `actions`/default | Buefy, transitively |
-| `ToolbarDropdown` | `options` (required), `allLabel` (required), `ariaLabel`; `v-model` (required) | `update:modelValue` | — | Buefy (`b-dropdown`) |
-| `ToolbarSearch` | `placeholder` (required), `ariaLabel`, `priority` (`"navbar"\|"page"`); `v-model` (required) | `update:modelValue`, `shortcut` | — | Buefy (`b-input`) |
-| `MobileFilters` | `active`, `triggerAriaLabel` (default `"Открыть фильтры"`), `triggerTitle` (default `"Фильтры"`) | — | default | Buefy (`b-dropdown`, `b-button`) |
-| `NavbarMenu` | — (reads `navbarMenuKey` injection) | — | default | — |
+| `Icon` | `name` (обязателен), `size` (по умолчанию `24`) | — | — | реестр иконок (см. ниже) |
+| `Loader` | `size` (`inline"\|"section"\|"screen"`, по умолчанию `"section"`), `label` (по умолчанию `"Загрузка"`) | — | — | `@iam3xtr/ui` (инлайнит его SVG-марки лоадера) |
+| `AsyncState` | `variant` (обязателен, один из `loading/empty/no-results/error/permission-denied`), `icon`, `title`, `message` | — | default (действия) | Buefy (`b-icon`) при переданном `icon` |
+| `ListAsyncState` | `loading`, `error`/`errorIcon`/`errorTitle`/`errorMessage`, `empty`/`emptyIcon`/`emptyTitle`/`emptyMessage`, `noResults`/`noResultsIcon`/`noResultsTitle`/`noResultsMessage` | — | default, `error-action`, `empty-action` | транзитивно Buefy через `AsyncState` |
+| `CopyPre` | `text`, `buttonLabel` (по умолчанию `"Копировать"`), `copiedLabel` (по умолчанию `"Скопировано!"`), `title`, `disabled` | — | default | Buefy (`b-icon`) |
+| `Toolbar` | `search`, `searchPlaceholder`, `searchAriaLabel`, `filtersActive` | `update:search`, `shortcut` | `filters`, `actions`/default | Buefy, транзитивно |
+| `ToolbarDropdown` | `options` (обязателен), `allLabel` (обязателен), `ariaLabel`; `v-model` (обязателен) | `update:modelValue` | — | Buefy (`b-dropdown`) |
+| `ToolbarSearch` | `placeholder` (обязателен), `ariaLabel`, `priority` (`"navbar"\|"page"`); `v-model` (обязателен) | `update:modelValue`, `shortcut` | — | Buefy (`b-input`) |
+| `MobileFilters` | `active`, `triggerAriaLabel` (по умолчанию `"Открыть фильтры"`), `triggerTitle` (по умолчанию `"Фильтры"`) | — | default | Buefy (`b-dropdown`, `b-button`) |
+| `NavbarMenu` | — (читает injection `navbarMenuKey`) | — | default | — |
 
-Every text-bearing prop above defaults to Russian to match the reference kit this
-package was extracted from; pass your own strings to localize. See each component's
-`.vue` file for the full doc comment (accessibility notes, SSR guarantees, exact
-markup).
+Каждый текстовый пропс выше по умолчанию на русском — по кабинету-эталону,
+из которого извлечён этот пакет; передавайте свои строки для локализации.
+Полный doc-комментарий (заметки о доступности, гарантии SSR, точная
+разметка) — в `.vue`-файле каждого компонента.
 
-## Components (`./navigation`)
+## Компоненты (`./navigation`)
 
-| Component | Props | Needs |
+| Компонент | Пропсы | Требует |
 | --- | --- | --- |
-| `PageHeader` | `title`, `subtitle`, `back` (`{ to, title? }`) | Vue Router; Buefy (`b-icon`) when `back` passed |
-| `NavbarTabs` | `items` (required, `{ label, to }[]`), `ariaLabel` (default `"Навигационные вкладки"`) | Vue Router |
-| `TariffSummaryCard` | `tariff` (required), `label` (default `"Тариф"`), `to` (optional — renders a plain `div` when omitted, a `RouterLink` to it otherwise) | Buefy (`b-progress`); Vue Router only when `to` is passed |
+| `PageHeader` | `title`, `subtitle`, `back` (`{ to, title? }`) | Vue Router; Buefy (`b-icon`) при переданном `back` |
+| `NavbarTabs` | `items` (обязателен, `{ label, to }[]`), `ariaLabel` (по умолчанию `"Навигационные вкладки"`) | Vue Router |
+| `TariffSummaryCard` | `tariff` (обязателен), `label` (по умолчанию `"Тариф"`), `to` (опционально — без него рендерится обычный `div`, с ним — `RouterLink`) | Buefy (`b-progress`); Vue Router только если передан `to` |
 
-## Icon registry
+## Реестр иконок
 
-`Icon` resolves a `name` against a registry your application provides — this package
-ships no icon files itself (the custom-icon set lives in `@iam3xtr/ui`'s `assets/icons/*`,
-and everything else is a plain `b-icon` MDI name that does not go through `Icon` at
-all). Register once, at the app root:
+`Icon` резолвит `name` против реестра, который предоставляет ваше
+приложение — сам пакет не поставляет файлы иконок (набор кастомных иконок
+живёт в `@iam3xtr/ui`'s `assets/icons/*`, всё остальное — обычное имя MDI
+для `b-icon`, которое через `Icon` не проходит вовсе). Регистрируется один
+раз, в корне приложения:
 
 ```js
 import { provideIconRegistry } from "@iam3xtr/vue";
-import anthropicIcon from "@iam3xtr/ui/assets/icons/anthropic.svg"; // via vite-svg-loader, e.g.
+import anthropicIcon from "@iam3xtr/ui/assets/icons/anthropic.svg"; // например, через vite-svg-loader
 
 provideIconRegistry(app, { anthropic: anthropicIcon /* , ... */ });
 ```
 
-A registry entry may be a Vue component (e.g. from `vite-svg-loader`) or a raw SVG
-markup string (e.g. from a plain `?raw` import) — `Icon` renders either. Nothing is
-registered as a side effect of importing `Icon` or this package.
+Записью реестра может быть Vue-компонент (например, из `vite-svg-loader`)
+или сырая SVG-разметка строкой (например, из обычного `?raw`-импорта) —
+`Icon` рендерит и то, и другое. Ничего не регистрируется как побочный
+эффект импорта `Icon` или самого пакета.
 
 ## Composables
 
-- **`useFocusTrap(containerRef, activeRef, options?)`** — focus trap + focus-return for
-  overlay-style UI where the host (e.g. a `b-dropdown`) traps `Tab` but does not return
-  focus to its trigger on close. `activeRef` is a one-way mirror of the host's own open
-  state; the composable never writes back to close it. Cleans up its `document` keydown
-  listener in `onUnmounted`.
-- **`navbarMenuKey`** — injection key for `NavbarMenu`'s Teleport target. The
-  application shell provides it once (`app.provide(navbarMenuKey, targetRef)`) with a
-  `Ref<Element | string | null>` (or a plain element/selector), matching what
-  `<Teleport :to>` accepts.
+- **`useFocusTrap(containerRef, activeRef, options?)`** — focus trap +
+  возврат фокуса для оверлейного UI, где хост (например, `b-dropdown`)
+  ловит `Tab`, но не возвращает фокус на свой триггер при закрытии.
+  `activeRef` — однонаправленное зеркало собственного open-состояния хоста;
+  composable никогда не пишет в него обратно, чтобы закрыть. Убирает свой
+  `document`-слушатель `keydown` в `onUnmounted`.
+- **`navbarMenuKey`** — injection-ключ для Teleport-цели `NavbarMenu`.
+  Application shell предоставляет его один раз
+  (`app.provide(navbarMenuKey, targetRef)`) значением
+  `Ref<Element | string | null>` (либо обычным элементом/селектором) — тем,
+  что принимает `<Teleport :to>`.
 
-## SSR and bundler contract
+## Контракт SSR и бандлера
 
-- Core-entry components read no browser global at import or setup time; `window`/
-  `document`/`navigator` access happens only inside `onMounted`/event handlers, always
-  paired with matching cleanup in `onBeforeUnmount`/`onUnmounted`.
-- No `@/...` path alias, no `vite-svg-loader` requirement: `Loader` inlines its
-  `@iam3xtr/ui` SVG marks via a plain `?raw` import (a Vite core feature, not a plugin);
-  `Icon` takes its assets through the injected registry instead of importing any itself.
-- No second Vue/Buefy/Vue Router instance, no `createApp`/`app.use`/`createRouter` call
-  anywhere in this package.
+- Компоненты core-входной точки не читают ни один браузерный global во
+  время импорта или setup; обращение к `window`/`document`/`navigator`
+  происходит только внутри `onMounted`/обработчиков событий, всегда в паре
+  с очисткой в `onBeforeUnmount`/`onUnmounted`.
+- Нет алиаса `@/...`, нет требования `vite-svg-loader`: `Loader` инлайнит
+  свои SVG-марки из `@iam3xtr/ui` через обычный `?raw`-импорт (базовая
+  возможность Vite, не плагин); `Icon` берёт свои ассеты через
+  внедрённый реестр, а не импортирует что-либо сам.
+- Нет второго экземпляра Vue/Buefy/Vue Router, нигде в пакете нет вызова
+  `createApp`/`app.use`/`createRouter`.
 
-## What's not here
+## Чего здесь нет
 
-No API clients, Pinia stores, RBAC, fixture/demo data, wizard or common-adapter
-locales, tariff/domain policy, or hardcoded product routes — `TariffSummaryCard`, the
-one component ported from a place that used to hardcode one, now takes its link target
-as a `to` prop instead. See the consuming application (and `@iam3xtr/ui` for the visual
-contract) for those.
+Нет API-клиентов, Pinia stores, RBAC, fixture/демо-данных, локалей мастера
+или common-адаптеров, тарифной/доменной политики или захардкоженных
+продуктовых роутов — `TariffSummaryCard`, единственный компонент,
+перенесённый оттуда, где раньше хардкодился один такой роут, теперь берёт
+целевую ссылку как проп `to`. За этим — см. потребляющее приложение (и
+`@iam3xtr/ui` для визуального контракта).
 
-## Development
+## Разработка
 
 ```bash
-npm install   # pulls vue/buefy/vue-router as devDependencies, @iam3xtr/ui from ../ui
-npm test      # component, accessibility, listener-cleanup, SSR and contract tests
+npm install   # подтягивает vue/buefy/vue-router как devDependencies, @iam3xtr/ui из ../ui
+npm test      # компонентные, accessibility, listener-cleanup, SSR и контрактные тесты
 ```
 
-## Releasing
+## Публикация
 
-Publish this package **after** a compatible `@iam3xtr/ui` is already
-published — this package's `peerDependencies` pin an `@iam3xtr/ui` range,
-and installing it before that range exists on the registry leaves consumers
-unable to resolve a working pair. See
-[`packages/consumers/README.md`](https://github.com/iam3xtr/trickster-ui-kit/blob/main/packages/consumers/README.md)
-in the UI Kit repo for the recommended-pair matrix, the tarball/registry
-consumer test matrix, and the partial-publish/rollback procedure.
+Публикуйте этот пакет **после** того, как уже опубликован совместимый
+`@iam3xtr/ui` — `peerDependencies` этого пакета закрепляют диапазон
+`@iam3xtr/ui`, и публикация до того, как этот диапазон появится в registry,
+оставит потребителей без возможности зарезолвить рабочую пару. Полный
+релизный процесс — порядок публикации, таблица рекомендуемой пары,
+тарбол/registry consumer-матрица, восстановление после partial publish и
+rollback — задокументирован одним нормативным текстом в
+[`docs/release-process.md`](https://github.com/iam3xtr/trickster-ui-kit/blob/main/docs/release-process.md)
+в репозитории UI Kit; здесь не дублируется.
 
-A release is cut by pushing a tag `vX.Y.Z` matching `package.json`'s
-`version` exactly — [`.github/workflows/release.yml`](.github/workflows/release.yml)
-then runs the full test suite, refuses a tag/version mismatch or an
-already-published version, and publishes to `npm.pkg.github.com` under a
-GitHub `environment: release` (configure required reviewers there so a human
-approves every publish). `packages:write` is requested only by that one job;
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml), which runs on every
-push/PR, stays `contents: read`. Both workflows also check out `iam3xtr/ui`
-into a sibling `../ui` directory (this package's `@iam3xtr/ui` devDependency
-is `file:../ui`, the same submodule-sibling layout the UI Kit uses), which
-needs its own read-only cross-repo token — see `packages/consumers/README.md`'s
-"CI, release workflow and credentials" section in the UI Kit repo for full
-credential scoping and denied-access diagnostics, not duplicated here.
+Релиз оформляется пушем тега `vX.Y.Z`, точно совпадающего с `version` из
+`package.json` — [`.github/workflows/release.yml`](.github/workflows/release.yml)
+затем прогоняет полный набор тестов, отказывает при несовпадении тега с
+версией или уже опубликованной версии и публикует в `npm.pkg.github.com`
+под GitHub `environment: release` (настройте там required reviewers, чтобы
+каждую публикацию подтверждал человек). `packages:write` запрашивает только
+эта джоба; [`.github/workflows/ci.yml`](.github/workflows/ci.yml), который
+запускается на каждый push/PR, остаётся на `contents: read`. Оба workflow
+также выкачивают `iam3xtr/ui` в соседнюю директорию `../ui` (devDependency
+`@iam3xtr/ui` этого пакета — `file:../ui`, та же submodule-sibling
+раскладка, что использует UI Kit), закреплённый на коммите из
+`.ui-compat-ref` — это требует отдельного read-only cross-repo токена; полное
+разграничение кредов и диагностика отказа доступа — в
+`docs/release-process.md`, здесь не дублируется.
