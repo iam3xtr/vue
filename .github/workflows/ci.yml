@@ -29,9 +29,8 @@ jobs:
       # it — pinned to the exact commit recorded in .ui-compat-ref (updated
       # in the same PR that bumps peerDependencies["@iam3xtr/ui"]), not
       # iam3xtr/ui's moving default branch, so re-running these checks later
-      # always tests the same verified pair. CROSS_REPO_READ_TOKEN is a
-      # fine-grained PAT scoped to `contents: read` on iam3xtr/ui only — the
-      # default GITHUB_TOKEN cannot read a different private repository.
+      # always tests the same verified pair. iam3xtr/ui is public, so this
+      # checkout intentionally needs no extra secret.
       - name: Read pinned @iam3xtr/ui ref
         id: ui-ref
         run: echo "sha=$(cat vue/.ui-compat-ref)" >> "$GITHUB_OUTPUT"
@@ -41,7 +40,6 @@ jobs:
         with:
           repository: iam3xtr/ui
           ref: ${{ steps.ui-ref.outputs.sha }}
-          token: ${{ secrets.CROSS_REPO_READ_TOKEN }}
           path: ui
 
       - name: Setup Node.js
