@@ -1,6 +1,6 @@
 {
   "name": "@iam3xtr/vue",
-  "version": "0.2.0",
+  "version": "0.1.1",
   "description": "Reusable Vue layer for 3xtr.im applications",
   "license": "MIT",
   "type": "module",
@@ -22,7 +22,7 @@
     "vue": "^3.5.0",
     "buefy": "^3.0.0",
     "vue-router": "^4.6.0",
-    "@iam3xtr/ui": "^0.2.0"
+    "@iam3xtr/ui": "^0.1.1"
   },
   "peerDependenciesMeta": {
     "vue-router": {
