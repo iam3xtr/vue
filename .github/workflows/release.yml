@@ -65,9 +65,20 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: vue/package-lock.json
+          cache-dependency-path: |
+            vue/package-lock.json
+            ui/package-lock.json
           registry-url: https://npm.pkg.github.com
           scope: "@iam3xtr"
+
+      # The pinned sibling is a source checkout. Its public `./icons` entry
+      # targets generated dist/icons.js, so build it before npm resolves the
+      # `file:../ui` devDependency used by Vue's component/export tests.
+      - name: Install and build pinned @iam3xtr/ui
+        working-directory: ui
+        run: |
+          npm ci
+          npm run build
 
       - name: Install dependencies
         working-directory: vue
