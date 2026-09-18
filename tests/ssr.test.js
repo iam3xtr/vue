@@ -21,6 +21,8 @@ describe("core entry point on the server", () => {
     expect(mod.CopyPre).toBeTruthy();
     expect(mod.Toolbar).toBeTruthy();
     expect(mod.NavbarMenu).toBeTruthy();
+    expect(mod.FileDropTarget).toBeTruthy();
+    expect(mod.FormDrawer).toBeTruthy();
   });
 
   it("server-renders Loader without touching window/document", async () => {
@@ -31,9 +33,17 @@ describe("core entry point on the server", () => {
     expect(html).toContain('role="status"');
   });
 
-  it("server-renders Icon (unregistered name) as the placeholder", async () => {
+  it("server-renders Icon resolved from the @iam3xtr/ui default registry", async () => {
     const { Icon } = await import("../src/index.js");
     const app = createSSRApp(Icon, { name: "anthropic" });
+    const html = await renderToString(app);
+    expect(html).toContain("tr-icon");
+    expect(html).toContain("<svg");
+  });
+
+  it("server-renders Icon (unregistered name, no Buefy) as the placeholder", async () => {
+    const { Icon } = await import("../src/index.js");
+    const app = createSSRApp(Icon, { name: "totally-unregistered-name" });
     const html = await renderToString(app);
     expect(html).toContain("tr-icon--placeholder");
   });
@@ -44,6 +54,9 @@ describe("core entry point on the server", () => {
     await expect(renderToString(createSSRApp(AsyncState, { variant: "empty", title: "None" }))).resolves.toContain(
       "tr-async-state",
     );
+    await expect(
+      renderToString(createSSRApp(AsyncState, { variant: "loading", title: "Loading agents" })),
+    ).resolves.toContain('aria-label="Loading agents"');
     await expect(renderToString(createSSRApp(ListAsyncState, {}))).resolves.toBeDefined();
     await expect(renderToString(createSSRApp(CopyPre, { text: "x" }))).resolves.toContain("copy-pre");
     // No injected target on the server (the shell never provides one during
@@ -56,4 +69,19 @@ describe("core entry point on the server", () => {
     const html = await renderToString(createSSRApp(Toolbar));
     expect(html).toContain("tr-page-toolbar");
   });
+
+  it("server-renders FileDropTarget without a drag in progress, no overlay markup", async () => {
+    const { FileDropTarget } = await import("../src/index.js");
+    const html = await renderToString(createSSRApp(FileDropTarget));
+    expect(html).toContain("tr-file-drop-target");
+    expect(html).not.toContain("tr-file-drop-target__overlay");
+  });
+
+  // FormDrawer's root element is `b-sidebar` itself (unlike the components
+  // above, which only reach for Buefy on an inner node under a plain
+  // wrapper), so — same as MobileFilters/ToolbarSearch/ToolbarDropdown, not
+  // covered here either — a meaningful render assertion needs Buefy
+  // registered, which is exactly the Buefy-SSR-compat scope this file's own
+  // contract (see header comment) leaves out. Its component test file
+  // covers behavior with Buefy mounted instead.
 });

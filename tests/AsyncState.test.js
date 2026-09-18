@@ -15,6 +15,31 @@ describe("AsyncState", () => {
     expect(wrapper.attributes("aria-live")).toBeUndefined();
   });
 
+  it("loading variant with no title/message keeps Loader's own default label", () => {
+    const wrapper = mount(AsyncState, { props: { variant: "loading" }, global: global_ });
+    expect(wrapper.find(".tr-loader").attributes("aria-label")).toBe("Загрузка");
+  });
+
+  it("loading variant passes title to Loader's label, not as visible text", () => {
+    const wrapper = mount(AsyncState, {
+      props: { variant: "loading", title: "Loading agents", message: "Please wait" },
+      global: global_,
+    });
+    expect(wrapper.find(".tr-loader").attributes("aria-label")).toBe("Loading agents");
+    expect(wrapper.find(".tr-async-state__title").exists()).toBe(false);
+    expect(wrapper.find(".tr-async-state__message").exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("Loading agents");
+    expect(wrapper.text()).not.toContain("Please wait");
+  });
+
+  it("loading variant falls back to message when title is absent", () => {
+    const wrapper = mount(AsyncState, {
+      props: { variant: "loading", message: "Please wait" },
+      global: global_,
+    });
+    expect(wrapper.find(".tr-loader").attributes("aria-label")).toBe("Please wait");
+  });
+
   it("error variant is an alert announced assertively", () => {
     const wrapper = mount(AsyncState, {
       props: { variant: "error", title: "Oops", message: "Try again" },

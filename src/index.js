@@ -22,6 +22,8 @@ export { default as ToolbarDropdown } from "./components/ToolbarDropdown.vue";
 export { default as ToolbarSearch } from "./components/ToolbarSearch.vue";
 export { default as MobileFilters } from "./components/MobileFilters.vue";
 export { default as NavbarMenu } from "./components/NavbarMenu.vue";
+export { default as FileDropTarget } from "./components/FileDropTarget.vue";
+export { default as FormDrawer } from "./components/FormDrawer.vue";
 
 export { iconRegistryKey, provideIconRegistry } from "./icon-registry.js";
 export { navbarMenuKey } from "./composables/navbarMenu.js";

@@ -88,4 +88,21 @@ describe("TariffSummaryCard", () => {
     expect(wrapper.text()).toContain("Plan");
     expect(wrapper.text()).toContain("Pro");
   });
+
+  // Issue #11.1 ("Сделать tariff card доступной ссылкой на тарифы"): the
+  // card must carry exactly one link semantic — no nested interactive
+  // control (e.g. Buefy's `b-progress`) that would create a second target
+  // or double-navigate on click/keyboard activation.
+  it("has exactly one interactive/focusable element — the card's own RouterLink root", async () => {
+    const router = makeRouter();
+    const wrapper = mount(TariffSummaryCard, {
+      props: { tariff, to: { name: "plans" } },
+      global: { plugins: [router, Buefy] },
+    });
+    await router.isReady();
+
+    const interactive = wrapper.findAll("a, button, input, [tabindex]");
+    expect(interactive).toHaveLength(1);
+    expect(interactive[0].element).toBe(wrapper.element);
+  });
 });

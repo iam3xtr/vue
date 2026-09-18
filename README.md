@@ -10,14 +10,16 @@ UI-состояний, фокуса и оверлеев. Зависит от в�
 fixture-данных, локалей мастера, тарифной или доменной политики, либо
 product-specific URL. Всё это остаётся в каждом потребляющем приложении.
 
-## Две входные точки
+## Три входные точки
 
 ```js
 import { Icon, Loader, AsyncState, ListAsyncState, CopyPre, Toolbar, ToolbarDropdown,
-         ToolbarSearch, MobileFilters, NavbarMenu,
+         ToolbarSearch, MobileFilters, NavbarMenu, FileDropTarget, FormDrawer,
          iconRegistryKey, provideIconRegistry, navbarMenuKey, useFocusTrap } from "@iam3xtr/vue";
 
 import { PageHeader, NavbarTabs, TariffSummaryCard } from "@iam3xtr/vue/navigation";
+
+import { trVue } from "@iam3xtr/vue/plugin";
 ```
 
 - **`.` (core)** — ни один компонент/composable выше не требует ни
@@ -31,6 +33,12 @@ import { PageHeader, NavbarTabs, TariffSummaryCard } from "@iam3xtr/vue/navigati
   входной точки (например, в SSR-контексте без смонтированного роутера)
   никогда не тянул это требование. Ни один из трёх не хардкодит собственный
   роут потребляющего приложения — см. пропсы каждого компонента ниже.
+- **`./plugin`** — `trVue`, `app.use()`-плагин, регистрирующий все
+  публичные компоненты обеих точек выше как глобальные `tr-*` (см. "Плагин
+  `trVue`" ниже). Как и `./navigation`, требует установленный Vue Router;
+  ни `.`, ни `./navigation` не импортируют этот модуль, так что именованные
+  импорты из них продолжают не требовать Vue Router независимо от того,
+  используется ли где-то в приложении `trVue`.
 
 ## Подключение
 
@@ -50,11 +58,75 @@ app.mount("#app");
 `@iam3xtr/ui` — обязательные peer-зависимости, `vue-router` — опциональная
 (нужна только для `./navigation`).
 
+## Плагин `trVue`
+
+Отдельная третья входная точка, `@iam3xtr/vue/plugin` — один документированный
+способ подключить весь публичный пакет (core + `./navigation`) сразу, для
+приложений, которым не важен bundle-контроль по отдельным компонентам.
+Именованные импорты из `.` и `./navigation` остаются нетронутой
+bundle-sensitive альтернативой: ни один из этих двух входов не импортирует
+`./plugin.js`, так что использование `trVue` где-то в приложении не тянет
+Vue Router в граф импортов кода, который продолжает делать только именованные
+импорты.
+
+```js
+import { createApp } from "vue";
+import { createRouter, createWebHistory } from "vue-router";
+import Buefy from "buefy";
+import { trVue } from "@iam3xtr/vue/plugin";
+import "@iam3xtr/ui/styles/theme.css"; // либо .scss — см. README пакета @iam3xtr/ui
+
+const router = createRouter({ history: createWebHistory(), routes });
+
+const app = createApp(App);
+app.use(router); // до trVue — trVue регистрирует PageHeader/NavbarTabs/TariffSummaryCard
+app.use(Buefy); // до trVue — этот пакет сам Buefy не регистрирует
+app.use(trVue); // порядок обязателен: Router -> Buefy -> trVue
+app.mount("#app");
+```
+
+`app.use(trVue)` регистрирует каждый публичный core- и
+navigation-компонент как глобальный, под фиксированным `tr-*` именем:
+
+| Глобальное имя | Компонент |
+| --- | --- |
+| `tr-icon` | `Icon` |
+| `tr-loader` | `Loader` |
+| `tr-async-state` | `AsyncState` |
+| `tr-list-async-state` | `ListAsyncState` |
+| `tr-copy-pre` | `CopyPre` |
+| `tr-toolbar` | `Toolbar` |
+| `tr-toolbar-dropdown` | `ToolbarDropdown` |
+| `tr-toolbar-search` | `ToolbarSearch` |
+| `tr-mobile-filters` | `MobileFilters` |
+| `tr-navbar-menu` | `NavbarMenu` |
+| `tr-file-drop-target` | `FileDropTarget` |
+| `tr-form-drawer` | `FormDrawer` |
+| `tr-page-header` | `PageHeader` (`./navigation`) |
+| `tr-navbar-tabs` | `NavbarTabs` (`./navigation`) |
+| `tr-tariff-summary-card` | `TariffSummaryCard` (`./navigation`) |
+
+Этот же список экспортирован как `trVueComponents` из `@iam3xtr/vue/plugin`
+для программной проверки, а не только для README.
+
+`app.use(trVue)` идемпотентен — повторный вызов на том же `app` (например, из
+переиспользуемого setup-хелпера, вызванного дважды) не переустанавливает
+компоненты и не выдаёт предупреждение Vue "already been registered". Плагин
+сам никогда не вызывает `app.use()`/`createRouter()`, не регистрирует Buefy
+и не импортирует тему `@iam3xtr/ui` — все три шага выше остаются за
+потребителем, до `app.use(trVue)`.
+
+Глобальное имя `tr-icon` регистрирует сам компонент `Icon`, а не данные —
+инъекция дополнительного реестра иконок (`provideIconRegistry`) остаётся
+отдельным шагом и не входит в `trVue`. `Icon` уже несёт `@iam3xtr/ui`'s
+default-реестр без этого шага (см. "Реестр иконок" ниже); `provideIconRegistry`
+нужен только чтобы что-то добавить/переопределить сверху.
+
 ## Компоненты (core)
 
 | Компонент | Пропсы | События | Слоты | Требует |
 | --- | --- | --- | --- | --- |
-| `Icon` | `name` (обязателен), `size` (по умолчанию `24`) | — | — | реестр иконок (см. ниже) |
+| `Icon` | `name` (legacy), `icon` (Buefy-совместимый алиас `name`), `size` (по умолчанию `24`) | — | default (высший приоритет — см. ниже) | `@iam3xtr/ui` (встроенный default-реестр); Buefy (`b-icon`) опционально как MDI fallback |
 | `Loader` | `size` (`inline"\|"section"\|"screen"`, по умолчанию `"section"`), `label` (по умолчанию `"Загрузка"`) | — | — | `@iam3xtr/ui` (инлайнит его SVG-марки лоадера) |
 | `AsyncState` | `variant` (обязателен, один из `loading/empty/no-results/error/permission-denied`), `icon`, `title`, `message` | — | default (действия) | Buefy (`b-icon`) при переданном `icon` |
 | `ListAsyncState` | `loading`, `error`/`errorIcon`/`errorTitle`/`errorMessage`, `empty`/`emptyIcon`/`emptyTitle`/`emptyMessage`, `noResults`/`noResultsIcon`/`noResultsTitle`/`noResultsMessage` | — | default, `error-action`, `empty-action` | транзитивно Buefy через `AsyncState` |
@@ -64,11 +136,55 @@ app.mount("#app");
 | `ToolbarSearch` | `placeholder` (обязателен), `ariaLabel`, `priority` (`"navbar"\|"page"`); `v-model` (обязателен) | `update:modelValue`, `shortcut` | — | Buefy (`b-input`) |
 | `MobileFilters` | `active`, `triggerAriaLabel` (по умолчанию `"Открыть фильтры"`), `triggerTitle` (по умолчанию `"Фильтры"`) | — | default | Buefy (`b-dropdown`, `b-button`) |
 | `NavbarMenu` | — (читает injection `navbarMenuKey`) | — | default | — |
+| `FileDropTarget` | `disabled`, `multiple` (по умолчанию `true`), `accept` (расширения/MIME/`image/*`, только клиентская подсказка), `overlayLabel` (по умолчанию `"Отпустите файлы, чтобы загрузить"`) | `files` (`File[]`, только на реальном drop файлов) | default | — |
+| `FormDrawer` | `v-model` (обязателен, open state), `title`, `busy`, `disabled`, `closeAriaLabel` (по умолчанию `"Закрыть"`) | `update:modelValue`, `submit` (не эмитится во время `busy`/`disabled`) | default (form body, scoped `{ busy, disabled }`), `footer` (actions, тот же scope) | Buefy (`b-sidebar`, `b-icon`) |
 
 Каждый текстовый пропс выше по умолчанию на русском — по кабинету-эталону,
 из которого извлечён этот пакет; передавайте свои строки для локализации.
 Полный doc-комментарий (заметки о доступности, гарантии SSR, точная
 разметка) — в `.vue`-файле каждого компонента.
+
+Для `AsyncState` с `variant="loading"` `title`/`message` не рендерятся как
+видимый текст рядом со спиннером — вместо этого они передаются во внутренний
+`Loader` как `label` (только accessible name): `title` в приоритете,
+`message` — fallback, а без обоих сохраняется документированный default
+`Loader`. Передавайте переведённые строки — компонент не вводит собственную
+package locale.
+
+`FileDropTarget` — переносимая drop-поверхность над произвольным
+интерактивным slot-содержимым (например, `b-table`): семантически
+нейтральный `div`, без скрытого `<input type="file">` и без picker — обычный
+click/focus/сортировка/dropdown дочернего контента не блокируются. Оверлей
+монтируется только во время реального drag файлов (`v-if`, не
+`visibility`/`opacity`) и невидим для указателя (`pointer-events: none` в
+теме `@iam3xtr/ui`), поэтому drag-события продолжают приходить на реальные
+вложенные узлы, а не на сам оверлей — это и удерживает его от мерцания при
+переходах между дочерними элементами. `accept` — только клиентская подсказка
+(как у native `<input accept>`), не security boundary; компонент не знает про
+upload, progress, retry, cancel или API — эмитит один `files` `File[]` и
+больше ничего не делает.
+
+`FormDrawer` — единый каркас правой формы поверх штатного `b-sidebar`
+(`right`, `overlay`, `fullheight`), а не самодельный overlay: Escape, клик
+по backdrop и scroll lock остаются контрактом Buefy. Header содержит
+`title` и доступную close-кнопку (`closeAriaLabel`); default slot — form
+body, который скроллится независимо; `footer` slot — действия, остающиеся
+видимыми под длинным body. Native `<form>` submit эмитит `submit` не более
+одного раза за клик/Enter и не эмитит его вовсе, пока `busy` или `disabled`
+— компонент не делает `preventDefault`-валидацию, не читает `FormData` и не
+знает про draft/API. Оба slot получают `busy`/`disabled` scoped-пропами для
+удобной привязки состояния кнопки в `footer`. Явное ограничение Buefy:
+`b-sidebar`, в отличие от `b-modal`, не реализует focus trap и возврат
+фокуса на triggering элемент при закрытии — `FormDrawer` не подменяет это
+собственной реализацией; консьюмеру, которому нужен focus trap/return для
+конкретного экрана, доступен `useFocusTrap` из этого же пакета.
+
+Правило применения (эталон — kit `/kit/dialogs-overlays`): `FormDrawer` —
+только для редактирования в правой панели с длинным body и fixed footer.
+Прямой Buefy `b-sidebar` остаётся для неформовых панелей (свойства,
+details), не для форм. `b-modal` — короткая форма без длинного body и без
+выделенного fixed footer. `b-dialog` — только подтверждение действия, не
+форма любой длины. `FormDrawer` не заменяет ни один из этих трёх.
 
 ## Компоненты (`./navigation`)
 
@@ -80,23 +196,52 @@ app.mount("#app");
 
 ## Реестр иконок
 
-`Icon` резолвит `name` против реестра, который предоставляет ваше
-приложение — сам пакет не поставляет файлы иконок (набор кастомных иконок
-живёт в `@iam3xtr/ui`'s `assets/icons/*`, всё остальное — обычное имя MDI
-для `b-icon`, которое через `Icon` не проходит вовсе). Регистрируется один
-раз, в корне приложения:
+`Icon` — независимый SVG-first адаптер с опциональным Buefy/MDI fallback.
+Порядок резолва для `name`/`icon` (первое совпадение выигрывает):
+
+1. **Непустой default slot** — полный escape hatch, любая разметка
+   (сторонний icon-компонент, `<b-icon alias="...">`, обычный текст).
+   `name`/`icon` при этом игнорируются, и, если они всё же переданы, в
+   консоль летит `console.warn` о конфликте.
+2. **`name`/`icon` в реестре потребителя** — из `provideIconRegistry`,
+   если он вызывался (см. ниже) — override/addition к шагу 3.
+3. **`name`/`icon` в default-реестре `@iam3xtr/ui`** (`@iam3xtr/ui/icons`) —
+   доступен всегда, без единого вызова `provideIconRegistry`. SVG на шаге
+   2 или 3 выигрывает у шага 4 даже при одноимённом MDI-имени.
+4. **`name`/`icon` как MDI-имя через глобально зарегистрированный
+   `BIcon`** (`app.use(Buefy)`) — читается из реестра компонентов текущего
+   приложения в момент рендера, никогда через статический
+   `import ... from "buefy"`. Без установленного Buefy этот шаг просто
+   пропускается; обычный `<b-icon>` в остальной разметке приложения этим
+   компонентом никак не затрагивается.
+5. `aria-hidden`-placeholder заданного размера.
+
+`name` (legacy) и `icon` (Buefy-совместимый алиас того же входа) — синонимы,
+передавайте тот, что читается лучше в месте вызова; при разных значениях
+обоих побеждает `name` (и в консоль летит `console.warn`).
+
+`provideIconRegistry` **не заменяет** `@iam3xtr/ui`'s default-реестр — только
+добавляет к нему или переопределяет отдельные записи, поэтому вызывать его
+нужно лишь для собственных иконок приложения или чтобы заменить одну из
+default-записей другим представлением (например, Vue-компонентом вместо
+сырой разметки):
 
 ```js
 import { provideIconRegistry } from "@iam3xtr/vue";
 import anthropicIcon from "@iam3xtr/ui/assets/icons/anthropic.svg"; // например, через vite-svg-loader
 
+// Переопределяет "anthropic" из @iam3xtr/ui/icons этим Vue-компонентом;
+// остальные 25 default-иконок продолжают резолвиться как раньше без этого
+// вызова вовсе.
 provideIconRegistry(app, { anthropic: anthropicIcon /* , ... */ });
 ```
 
 Записью реестра может быть Vue-компонент (например, из `vite-svg-loader`)
-или сырая SVG-разметка строкой (например, из обычного `?raw`-импорта) —
-`Icon` рендерит и то, и другое. Ничего не регистрируется как побочный
-эффект импорта `Icon` или самого пакета.
+или сырая SVG-разметка строкой (например, из обычного `?raw`-импорта, либо
+как есть из `@iam3xtr/ui/icons`) — `Icon` рендерит и то, и другое.
+`provideIconRegistry` — единственный побочный эффект в этом контракте
+(`app.provide`, один раз, в корне приложения); импорт `Icon` или самого
+пакета сам по себе ничего не регистрирует и не мутирует.
 
 ## Composables
 
@@ -120,8 +265,13 @@ provideIconRegistry(app, { anthropic: anthropicIcon /* , ... */ });
   с очисткой в `onBeforeUnmount`/`onUnmounted`.
 - Нет алиаса `@/...`, нет требования `vite-svg-loader`: `Loader` инлайнит
   свои SVG-марки из `@iam3xtr/ui` через обычный `?raw`-импорт (базовая
-  возможность Vite, не плагин); `Icon` берёт свои ассеты через
-  внедрённый реестр, а не импортирует что-либо сам.
+  возможность Vite, не плагин); `Icon` берёт свой default-реестр из
+  `@iam3xtr/ui/icons` (обычный named-импорт JS-модуля — ни `import.meta.glob`,
+  ни бандлер-специфичный синтаксис) и опциональные добавления — через
+  внедрённый `provideIconRegistry` реестр. Buefy-fallback `Icon` читает
+  `BIcon` из реестра компонентов текущего приложения в момент рендера —
+  нет статического `import ... from "buefy"`, поэтому прямой импорт `Icon`
+  работает без установленного Buefy.
 - Нет второго экземпляра Vue/Buefy/Vue Router, нигде в пакете нет вызова
   `createApp`/`app.use`/`createRouter`.
 

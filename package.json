@@ -12,6 +12,7 @@
     "exports": {
         ".": "./src/index.js",
         "./navigation": "./src/navigation.js",
+        "./plugin": "./src/plugin.js",
         "./package.json": "./package.json"
     },
     "scripts": {
