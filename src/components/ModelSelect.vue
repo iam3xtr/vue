@@ -45,7 +45,6 @@
           v-model="searchQuery"
           :data="visibleOptions"
           field="name"
-          group-field="group"
           open-on-focus
           dropdown-position="bottom"
           :placeholder="searchPlaceholder"
@@ -245,7 +244,7 @@ const recommendedEntries = computed(() => {
   const out = [];
   for (const id of props.recommendedModels) {
     const model = modelsById.value.get(id);
-    if (model) out.push({ ...model, group: "__recommended" });
+    if (model) out.push(model);
   }
   return out;
 });
@@ -259,7 +258,7 @@ const visibleOptions = computed(() => {
   if (!hasQuery.value) {
     return recommendedEntries.value;
   }
-  return props.searchResults.map((model) => ({ ...model, group: "__search" }));
+  return props.searchResults;
 });
 
 const canonicalDisplay = computed(() => {

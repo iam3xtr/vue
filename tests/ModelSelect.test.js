@@ -88,8 +88,8 @@ describe("ModelSelect — public catalog contract (mode=model)", () => {
     });
     await nextTick();
     expect(wrapper.vm.visibleOptions).toEqual([
-      expect.objectContaining({ id: "gpt", group: "__recommended" }),
-      expect.objectContaining({ id: "claude", group: "__recommended" }),
+      expect.objectContaining({ id: "gpt" }),
+      expect.objectContaining({ id: "claude" }),
     ]);
   });
 
@@ -103,7 +103,7 @@ describe("ModelSelect — public catalog contract (mode=model)", () => {
     wrapper.vm.searchQuery = "mis";
     await nextTick();
     expect(wrapper.vm.visibleOptions).toEqual([
-      expect.objectContaining({ id: "mistral", group: "__search" }),
+      expect.objectContaining({ id: "mistral" }),
     ]);
   });
 
@@ -169,6 +169,29 @@ describe("ModelSelect — public catalog contract (mode=model)", () => {
     expect(input.element.closest('[role="listbox"]')).toBeNull();
     expect(input.attributes("aria-label")).toBe("Search models");
     expect(input.attributes("aria-autocomplete")).toBe("list");
+  });
+
+  it("renders no component-owned group headers in the open popup", async () => {
+    // The component is i18n-neutral: the open popup may only show
+    // caller-provided copy and model names, never internal group markers.
+    const wrapper = mountModel({
+      models,
+      recommendedModels: ["gpt", "claude"],
+      searchResults: [models[2]],
+      modelValue: null,
+    });
+    const input = wrapper.find(".tr-model-select__popup input");
+    await input.trigger("focus");
+    await nextTick();
+    const popup = wrapper.find(".tr-model-select__popup");
+    expect(popup.text()).toContain("GPT");
+    expect(popup.text()).not.toMatch(/__recommended|__search/);
+
+    wrapper.vm.searchQuery = "mis";
+    await nextTick();
+    await nextTick();
+    expect(popup.text()).toContain("Mistral");
+    expect(popup.text()).not.toMatch(/__recommended|__search/);
   });
 });
 
