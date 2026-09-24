@@ -249,6 +249,17 @@ describe("ModelSelect — free-form BYOK action", () => {
         return wrapper;
     }
 
+    // Keyboard path: Buefy's autocomplete closes on Tab/Escape, its
+    // arrows walk an empty list, and Enter with nothing hovered selects
+    // nothing, so Enter in the search input must commit the free-form id.
+    async function pressEnter(wrapper) {
+        await wrapper
+            .findComponent({ name: "BAutocomplete" })
+            .find("input")
+            .trigger("keydown", { key: "Enter" });
+        await settle();
+    }
+
     for (const props of [{ mode: "byok" }, { mode: "both", useOwnApiKey: true }]) {
         it(`offers a valid trimmed id with the formatted label (${props.mode})`, async () => {
             const errors = [];
@@ -290,7 +301,61 @@ describe("ModelSelect — free-form BYOK action", () => {
             expect(errors).toEqual([]);
             wrapper.unmount();
         });
+
+        it(`Enter in the search input commits a valid free-form id (${props.mode})`, async () => {
+            const errors = [];
+            const wrapper = await typeQuery(
+                { ...props, modelId: "gpt", byokModelId: "claude" },
+                "  vendor/model-x  ",
+                errors,
+            );
+            await pressEnter(wrapper);
+            expect(wrapper.emitted("update:providerModelId")).toEqual([["vendor/model-x"]]);
+            expect(wrapper.emitted("update:byokModelId")).toEqual([[null]]);
+            expect(wrapper.emitted("update:modelId")).toBeUndefined();
+            expect(errors).toEqual([]);
+            wrapper.unmount();
+        });
+
+        it(`Enter in the search input ignores an invalid free-form id (${props.mode})`, async () => {
+            const errors = [];
+            const wrapper = await typeQuery({ ...props, byokModelId: "claude" }, "vendor model", errors);
+            await pressEnter(wrapper);
+            expect(wrapper.emitted("update:providerModelId")).toBeUndefined();
+            expect(wrapper.emitted("update:byokModelId")).toBeUndefined();
+            expect(wrapper.emitted("update:modelId")).toBeUndefined();
+            expect(errors).toEqual([]);
+            wrapper.unmount();
+        });
+
+        for (const status of ["loading", "error"]) {
+            it(`Enter in the search input does not commit while ${status} (${props.mode})`, async () => {
+                const errors = [];
+                const wrapper = await typeQuery(
+                    { ...props, byokModelId: "claude", [status]: true },
+                    "vendor/model-x",
+                    errors,
+                );
+                expect(wrapper.find(".tr-model-select__freeform-action").exists()).toBe(false);
+                await pressEnter(wrapper);
+                expect(wrapper.emitted("update:providerModelId")).toBeUndefined();
+                expect(wrapper.emitted("update:byokModelId")).toBeUndefined();
+                expect(errors).toEqual([]);
+                wrapper.unmount();
+            });
+        }
     }
+
+    it("Enter in the search input never commits free-form in mode=model", async () => {
+        const errors = [];
+        const wrapper = await typeQuery({ mode: "model" }, "vendor/model-x", errors);
+        await pressEnter(wrapper);
+        expect(wrapper.emitted("update:providerModelId")).toBeUndefined();
+        expect(wrapper.emitted("update:byokModelId")).toBeUndefined();
+        expect(wrapper.emitted("update:modelId")).toBeUndefined();
+        expect(errors).toEqual([]);
+        wrapper.unmount();
+    });
 });
 
 describe("ModelSelect — package boundary (no Vue Router / no Pinia)", () => {

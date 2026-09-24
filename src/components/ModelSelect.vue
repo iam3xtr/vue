@@ -42,6 +42,7 @@
         :id="popupId"
         class="tr-model-select__popup"
         @focusout="onFocusOut"
+        @keydown.enter="onSearchEnter"
       >
         <!--
           `mode === "both"` adds a controlled switch above the search
@@ -580,6 +581,21 @@ function selectFreeform() {
   clearTimeout(focusOutTimer);
   focusOutTimer = null;
   nextTick(focusTrigger);
+}
+
+// Keyboard commit for the free-form path. The action lives in
+// `b-autocomplete`'s `#empty` slot, which Buefy's keyboard model cannot
+// reach: Tab/Escape close the menu, arrows walk the (empty) option list
+// and Enter with no hovered option selects nothing. Enter in the search
+// input therefore commits the free-form candidate itself; it only acts
+// while the candidate is visible (no search results, no loading/error)
+// and `selectFreeform` ignores invalid ids.
+function onSearchEnter(event) {
+  if (event?.isComposing) return;
+  if (!freeformVisible.value) return;
+  const input = searchInput();
+  if (!input || event?.target !== input) return;
+  selectFreeform();
 }
 
 function onSwitchChange(event) {
