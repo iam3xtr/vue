@@ -142,7 +142,7 @@ default-реестр без этого шага (см. "Реестр иконо�
 | `NavbarMenu` | — (читает injection `navbarMenuKey`) | — | default | — |
 | `FileDropTarget` | `disabled`, `multiple` (по умолчанию `true`), `accept` (расширения/MIME/`image/*`, только клиентская подсказка), `overlayLabel` (по умолчанию `"Отпустите файлы, чтобы загрузить"`) | `files` (`File[]`, только на реальном drop файлов) | default | — |
 | `FormDrawer` | `v-model` (обязателен, open state), `title`, `busy`, `disabled`, `closeAriaLabel` (по умолчанию `"Закрыть"`) | `update:modelValue`, `submit` (не эмитится во время `busy`/`disabled`) | default (form body, scoped `{ busy, disabled }`), `footer` (actions, тот же scope) | Buefy (`b-sidebar`, `b-icon`) |
-| `ModelSelect` | `mode` (этап 2.1 — фиксированно `"model"`), `models` (обязателен, `[{id,name,provider?}]`), `recommendedModels`, `searchResults`, `loading`, `error`, `invalid`, `disabled`, `inputId`, `triggerPlaceholder`, `searchPlaceholder`, `triggerAriaLabel`, `searchAriaLabel`, `triggerTitle`, `emptyLabel`; `v-model:modelId` (канонический выбор) | `update:modelId`, `update:query` | — | Buefy (`b-dropdown`, `b-button`, `b-autocomplete`) |
+| `ModelSelect` | `mode` (этап 2.1 — фиксированно `"model"`), `models` (обязателен, `[{id,name,provider?}]`), `recommendedModels`, `searchResults`, `loading`, `error`, `invalid`, `disabled`, `inputId`, `triggerPlaceholder`, `searchPlaceholder`, `triggerAriaLabel`, `searchAriaLabel`, `triggerTitle`, `emptyLabel`, `loadingLabel`, `errorLabel`; `v-model:modelId` (канонический выбор) | `update:modelId`, `update:query` | — | Buefy (`b-dropdown`, `b-button`, `b-autocomplete`) |
 
 `ToolbarDropdown` и `MobileFilters` используют общий overlay: открытое меню
 перекрывает следующий контент и меняет направление у края viewport. Если
@@ -209,6 +209,110 @@ body, который скроллится независимо; `footer` slot �
 details), не для форм. `b-modal` — короткая форма без длинного body и без
 выделенного fixed footer. `b-dialog` — только подтверждение действия, не
 форма любой длины. `FormDrawer` не заменяет ни один из этих трёх.
+
+### `ModelSelect`: режим `model`
+
+`ModelSelect` — выбор модели из каталога. Сейчас поддерживается только
+`mode="model"`; режимы `byok` и `both` ещё не реализованы (для другого
+значения `mode` Vue выводит dev-предупреждение validator), не полагайтесь
+на них.
+
+Данные полностью готовит consumer, компонент сам не фильтрует каталог и не
+делает запросов:
+
+- `models` (обязателен) — каталог `[{ id, name, provider? }]` с устойчивым
+  строковым `id`. Из `provider` читаются только `icon`/`protocol`/`id` для
+  иконки (fallback — `brain`).
+- `recommendedModels` — массив `id` из `models`; показывается, пока query
+  пуст или состоит из пробелов. Неизвестные `id` пропускаются.
+- `searchResults` — полные записи модели; показываются только при непустом
+  query. `update:query` эмитится на каждый ввод (и `""` при открытии) —
+  по нему consumer фильтрует локально или запрашивает API.
+- `v-model:model-id` — канонический выбор (`id` строкой или `null`).
+  Закрытый trigger показывает `name` модели с этим `id` из `models`,
+  независимо от transient query; если `id` в `models` нет, показывается
+  `triggerPlaceholder`. Открытие очищает query и переводит focus на поиск,
+  закрытие без выбора сохраняет `modelId`. Выбранная модель в списке
+  определяется по `id` и помечается видимым «✓» и `aria-current="true"`.
+- `loading`/`error` — состояние запроса consumer. Когда видимый список
+  пуст, popup показывает ровно одно сообщение с приоритетом
+  error > loading > empty: `errorLabel` (`role="alert"`), `loadingLabel`
+  (`role="status"`, `aria-busy="true"`) или `emptyLabel`
+  (`role="status"`).
+- `invalid` — ошибка валидации на закрытом trigger (`is-danger` +
+  `aria-invalid="true"`); `inputId` становится `id` trigger-кнопки, чтобы
+  внешний `<label for>` или сводка ошибок формы ссылались на неё.
+  `disabled` блокирует открытие.
+
+Компонент i18n-нейтрален: все видимые тексты и accessible names
+(`triggerPlaceholder`, `searchPlaceholder`, `triggerAriaLabel`,
+`searchAriaLabel`, `triggerTitle`, `emptyLabel`, `loadingLabel`,
+`errorLabel`) по умолчанию пустые и передаются consumer. Popup — один
+внешний `b-dropdown` на общем overlay (`useDropdownOverlay`, см. выше):
+search row и результаты остаются в одном popup, внутренний
+`b-autocomplete` не создаёт второй body-portal и не выбирает своё
+направление; Buefy сохраняет keyboard/focus/close и layering в
+modal/drawer.
+
+#### Адаптация production-формы
+
+`ModelSelect` намеренно не переносит поведение текущего production
+selector `get.3xtr.im`. Если форме оно нужно, consumer реализует его явно
+вокруг компонента:
+
+- **`returnObject`** — компонент всегда эмитит только `id`; объект модели
+  consumer получает сам по `id` из своего каталога.
+- **hidden `name`** — скрытого `<input>` нет; для native form submit
+  consumer рендерит его сам.
+- **auto-select** — компонент не подменяет выбор, если `modelId` пропал
+  из `models`; решение (сбросить, выбрать первую модель, показать
+  `invalid`) принимает consumer.
+
+```vue
+<script setup>
+import { computed, ref, watch } from "vue";
+import { ModelSelect } from "@iam3xtr/vue";
+
+const props = defineProps({ models: Array, recommended: Array });
+const modelId = ref(null);
+const query = ref("");
+
+// returnObject: объект по id — на стороне consumer.
+const selectedModel = computed(() => props.models.find((m) => m.id === modelId.value) ?? null);
+
+const searchResults = computed(() => {
+  const q = query.value.trim().toLowerCase();
+  return q ? props.models.filter((m) => m.name.toLowerCase().includes(q)) : [];
+});
+
+// auto-select: явная политика consumer вместо скрытого поведения компонента.
+watch(() => props.models, (next) => {
+  if (modelId.value != null && next?.length && !next.some((m) => m.id === modelId.value)) {
+    modelId.value = next[0].id;
+  }
+}, { immediate: true });
+</script>
+
+<template>
+  <label for="agent-model">{{ t("agent.model") }}</label>
+  <ModelSelect
+    v-model:model-id="modelId"
+    input-id="agent-model"
+    :models="models"
+    :recommended-models="recommended"
+    :search-results="searchResults"
+    :trigger-placeholder="t('agent.modelPlaceholder')"
+    :search-placeholder="t('agent.modelSearch')"
+    :empty-label="t('agent.modelEmpty')"
+    @update:query="query = $event"
+  />
+  <!-- hidden name: только если форма отправляется нативно -->
+  <input type="hidden" name="model" :value="modelId ?? ''" />
+</template>
+```
+
+Перенос `ModelSelect` в `get.3xtr.im` — отдельная задача consumer
+(`get.3xtr.im#19`, после `api.3xtr.im#112`); этот пакет её не выполняет.
 
 ## Компоненты (`./navigation`)
 
