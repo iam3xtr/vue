@@ -203,6 +203,96 @@ describe("ModelSelect — mode=both (mode switch)", () => {
     });
 });
 
+describe("ModelSelect — free-form BYOK action", () => {
+    const freeformLabels = {
+        freeformActionLabel: "Use {id}",
+        freeformErrorLabel: "Invalid model id",
+        freeformHint: "Press Enter to use this id",
+    };
+
+    async function settle() {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await nextTick();
+        await nextTick();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    // Any render/computed error (e.g. a ReferenceError from an
+    // unresolved identifier) must fail the test instead of being
+    // swallowed by Vue's default handler.
+    function strictGlobal(errors) {
+        return {
+            config: {
+                errorHandler: (err) => {
+                    errors.push(err);
+                    throw err;
+                },
+            },
+        };
+    }
+
+    async function typeQuery(props, query, errors) {
+        const wrapper = mountModel(
+            {
+                models,
+                recommendedModels: [],
+                searchResults: [],
+                ...freeformLabels,
+                ...props,
+            },
+            { global: strictGlobal(errors) },
+        );
+        await wrapper.find("button.tr-model-select__trigger").trigger("keydown", { key: "ArrowDown" });
+        await settle();
+        await wrapper.findComponent({ name: "BAutocomplete" }).find("input").setValue(query);
+        await settle();
+        return wrapper;
+    }
+
+    for (const props of [{ mode: "byok" }, { mode: "both", useOwnApiKey: true }]) {
+        it(`offers a valid trimmed id with the formatted label (${props.mode})`, async () => {
+            const errors = [];
+            const wrapper = await typeQuery(props, "  vendor/model-x  ", errors);
+            const action = wrapper.find(".tr-model-select__freeform-action");
+            expect(action.exists()).toBe(true);
+            expect(action.text()).toBe("Use vendor/model-x");
+            expect(action.attributes("disabled")).toBeUndefined();
+            expect(wrapper.find(".tr-model-select__freeform-hint").text()).toBe(
+                freeformLabels.freeformHint,
+            );
+            expect(errors).toEqual([]);
+            wrapper.unmount();
+        });
+
+        it(`disables the action and shows freeformErrorLabel for an id with whitespace (${props.mode})`, async () => {
+            const errors = [];
+            const wrapper = await typeQuery(props, "vendor model", errors);
+            const action = wrapper.find(".tr-model-select__freeform-action");
+            expect(action.exists()).toBe(true);
+            expect(action.attributes("disabled")).toBeDefined();
+            expect(action.attributes("title")).toBe(freeformLabels.freeformErrorLabel);
+            expect(wrapper.find(".tr-model-select__freeform-hint").text()).toBe(
+                freeformLabels.freeformErrorLabel,
+            );
+            expect(errors).toEqual([]);
+            wrapper.unmount();
+        });
+
+        it(`disables the action and shows freeformErrorLabel for an id over 255 chars (${props.mode})`, async () => {
+            const errors = [];
+            const wrapper = await typeQuery(props, "m".repeat(256), errors);
+            const action = wrapper.find(".tr-model-select__freeform-action");
+            expect(action.exists()).toBe(true);
+            expect(action.attributes("disabled")).toBeDefined();
+            expect(wrapper.find(".tr-model-select__freeform-hint").text()).toBe(
+                freeformLabels.freeformErrorLabel,
+            );
+            expect(errors).toEqual([]);
+            wrapper.unmount();
+        });
+    }
+});
+
 describe("ModelSelect — package boundary (no Vue Router / no Pinia)", () => {
     it("renders in all three modes without importing vue-router or pinia", async () => {
         for (const mode of ["model", "byok", "both"]) {

@@ -535,10 +535,10 @@ const freeformTrimmed = computed(() => trimmedQuery.value);
 const freeformError = computed(() => {
   if (!freeformTrimmed.value) return "";
   if (/\s/.test(freeformTrimmed.value)) {
-    return freeformErrorLabel;
+    return props.freeformErrorLabel;
   }
   if (freeformTrimmed.value.length > FREEFORM_MAX_LENGTH) {
-    return freeformErrorLabel;
+    return props.freeformErrorLabel;
   }
   return "";
 });
@@ -563,7 +563,7 @@ const formattedFreeformActionLabel = computed(() => {
   // The action label accepts `{id}` as a placeholder for the trimmed
   // query; the consumer stays in control of the surrounding copy
   // because the component ships no built-in translations.
-  const template = freeformActionLabel || "";
+  const template = props.freeformActionLabel || "";
   if (!template.includes("{id}")) return template;
   return template.replace("{id}", freeformTrimmed.value);
 });
