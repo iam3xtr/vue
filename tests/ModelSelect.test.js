@@ -154,9 +154,21 @@ describe("ModelSelect — public catalog contract (mode=model)", () => {
     expect(trigger.attributes("aria-invalid")).toBe("true");
   });
 
-  it("exposes the b-dropdown root as a listbox for assistive tech", () => {
-    const wrapper = mountModel({ models, recommendedModels: ["gpt"], modelValue: null });
-    expect(wrapper.find('[aria-role="listbox"]').exists()).toBe(true);
+  it("does not wrap the search combobox in an outer listbox role", () => {
+    // The b-autocomplete owns its own suggestion list (WAI-ARIA combobox
+    // pattern); an outer role="listbox" on the dropdown content would
+    // nest an editable input inside a listbox, which is invalid ARIA.
+    const wrapper = mountModel({
+      models,
+      recommendedModels: ["gpt"],
+      modelValue: null,
+      searchAriaLabel: "Search models",
+    });
+    const input = wrapper.find(".tr-model-select__popup input");
+    expect(input.exists()).toBe(true);
+    expect(input.element.closest('[role="listbox"]')).toBeNull();
+    expect(input.attributes("aria-label")).toBe("Search models");
+    expect(input.attributes("aria-autocomplete")).toBe("list");
   });
 });
 

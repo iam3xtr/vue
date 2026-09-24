@@ -6,7 +6,6 @@
     :class="{ 'tr-model-select--open': isOpen }"
     :position="positionRef"
     :append-to-body="appendToBody"
-    aria-role="listbox"
     @active-change="onActiveChange"
   >
     <template #trigger>
