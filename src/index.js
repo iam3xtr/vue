@@ -32,4 +32,5 @@ export {
   useDropdownOverlay,
   DROPDOWN_OVERLAY_MARKER,
   POSITIONS,
+  resolveDropdownPlacement,
 } from "./composables/useDropdownOverlay.js";

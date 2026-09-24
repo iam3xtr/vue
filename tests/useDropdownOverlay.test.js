@@ -6,6 +6,7 @@ import {
   POSITIONS,
   useDropdownOverlay,
   DROPDOWN_OVERLAY_MARKER,
+  resolveDropdownPlacement,
 } from "../src/composables/useDropdownOverlay.js";
 
 // ------------------------------------------------------------------
@@ -311,7 +312,9 @@ describe("useDropdownOverlay", () => {
 
   it("shifts the body-portal menu left in is-*-left positions so the right edge stays anchored", async () => {
     ({ refs } = mountFresh({ appendToBody: true }));
-    setRect(refs.triggerRef.value, { top: 100, bottom: 130, height: 30, left: 200, right: 300 });
+    setRect(refs.triggerRef.value, {
+      top: 100, bottom: 130, height: 30, left: 200, right: 300, width: 100,
+    });
     setRect(refs.menuRef.value, { top: 130, height: 120, left: 120, width: 200, right: 320 });
     refs.positionRef.value = "is-bottom-left";
     refs.activeRef.value = true;
@@ -336,4 +339,68 @@ describe("useDropdownOverlay", () => {
     // The !important-priority write from the composable must win.
     expect(refs.menuRef.value.style.getPropertyValue("z-index")).toBe("35");
   });
+
+  it("leaves Buefy's fixed mobile-modal menu alone (no flip, no z-index override)", async () => {
+    ({ refs } = mountFresh({ appendToBody: true }));
+    setRect(refs.triggerRef.value, { top: 720, bottom: 750, height: 30 });
+    setRect(refs.menuRef.value, { height: 200 });
+    refs.menuRef.value.style.setProperty("position", "fixed");
+    refs.menuRef.value.style.setProperty("z-index", "50", "important");
+    refs.activeRef.value = true;
+    await nextTick();
+    await flushMicro();
+    expect(refs.positionRef.value).toBe("is-bottom-left");
+    expect(refs.menuRef.value.style.getPropertyValue("z-index")).toBe("50");
+    expect(refs.menuRef.value.style.getPropertyValue("top")).toBe("");
+  });
+});
+
+describe("resolveDropdownPlacement", () => {
+  let host;
+
+  beforeEach(() => {
+    host = document.createElement("div");
+    document.body.appendChild(host);
+  });
+
+  afterEach(() => {
+    host.remove();
+  });
+
+  const anchorIn = (html) => {
+    host.innerHTML = html;
+    return host.querySelector(".anchor");
+  };
+
+  it("returns inline without an anchor", () => {
+    expect(resolveDropdownPlacement(null)).toBe("inline");
+  });
+
+  it("keeps the menu inline when no ancestor clips overflow", () => {
+    const anchor = anchorIn('<div><div class="anchor"></div></div>');
+    expect(resolveDropdownPlacement(anchor)).toBe("inline");
+  });
+
+  it.each(["hidden", "auto", "scroll", "clip"])(
+    "moves the menu to a body portal under an overflow: %s ancestor",
+    (overflow) => {
+      const anchor = anchorIn(
+        `<div style="overflow: ${overflow}"><div><div class="anchor"></div></div></div>`,
+      );
+      expect(resolveDropdownPlacement(anchor)).toBe("portal");
+    },
+  );
+
+  it.each([".modal", ".sidebar-content", ".dropdown-menu", "[role='dialog']"])(
+    "keeps the menu inline inside a %s stacking context even when clipped",
+    (selector) => {
+      const attr = selector.startsWith("[")
+        ? 'role="dialog"'
+        : `class="${selector.slice(1)}"`;
+      const anchor = anchorIn(
+        `<div ${attr}><div style="overflow: auto"><div class="anchor"></div></div></div>`,
+      );
+      expect(resolveDropdownPlacement(anchor)).toBe("inline");
+    },
+  );
 });

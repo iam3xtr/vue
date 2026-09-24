@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import Buefy from "buefy";
+import { nextTick } from "vue";
 
 import Toolbar from "../src/components/Toolbar.vue";
 import ToolbarDropdown from "../src/components/ToolbarDropdown.vue";
@@ -42,11 +43,10 @@ describe("Toolbar", () => {
       global: global_,
     });
     try {
-      // MobileFilters uses `append-to-body`: the inline copy lives under
-      // the wrapper, the body-portal copy lives directly under
-      // `document.body`. Both must be present so the consumer sees two
-      // semantically identical filter trees.
-      expect(wrapper.findAll(".my-filter")).toHaveLength(1);
+      // No ancestor clips overflow here, so MobileFilters keeps its panel
+      // inline: both semantically identical filter trees live under the
+      // wrapper.
+      expect(wrapper.findAll(".my-filter")).toHaveLength(2);
       expect(document.body.querySelectorAll(".my-filter")).toHaveLength(2);
       expect(wrapper.findComponent(MobileFilters).exists()).toBe(true);
     } finally {
@@ -96,6 +96,71 @@ describe("MobileFilters", () => {
     });
     const trigger = wrapper.find(".tr-mobile-filters__trigger");
     expect(trigger.attributes("aria-label")).toBe("Open filters");
+  });
+});
+
+describe.each([
+  ["ToolbarDropdown", ToolbarDropdown, { options: ["a"], allLabel: "All", modelValue: "" }],
+  ["MobileFilters", MobileFilters, {}],
+])("%s placement", (_name, Component, props) => {
+  const mountIn = async (hostHtml) => {
+    const host = document.createElement("div");
+    host.innerHTML = hostHtml;
+    document.body.appendChild(host);
+    const target = host.querySelector(".mount");
+    const wrapper = mount(Component, { props, attachTo: target, global: global_ });
+    await nextTick();
+    await nextTick();
+    const menus = [...document.body.querySelectorAll(".dropdown-menu")];
+    const menu = menus.find((el) => !el.closest(".dropdown-content")) ?? null;
+    return {
+      wrapper,
+      menu,
+      cleanup: () => {
+        wrapper.unmount();
+        host.remove();
+      },
+    };
+  };
+
+  it("keeps the menu inline when nothing clips it", async () => {
+    const { menu, cleanup } = await mountIn('<div><div class="mount"></div></div>');
+    try {
+      expect(menu.closest(".mount")).not.toBeNull();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("moves the menu to a body portal inside a clipping container", async () => {
+    const { menu, cleanup } = await mountIn(
+      '<div style="overflow: hidden"><div class="mount"></div></div>',
+    );
+    try {
+      expect(menu.closest(".mount")).toBeNull();
+      expect(menu.closest(".dropdown").parentElement.parentElement).toBe(document.body);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("stays inline inside a modal even when clipped", async () => {
+    const { menu, cleanup } = await mountIn(
+      '<div class="modal"><div style="overflow: auto"><div class="mount"></div></div></div>',
+    );
+    try {
+      expect(menu.closest(".mount")).not.toBeNull();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("removes the Buefy body portal on unmount", async () => {
+    const { cleanup } = await mountIn(
+      '<div style="overflow: hidden"><div class="mount"></div></div>',
+    );
+    cleanup();
+    expect(document.body.querySelector(".dropdown-menu")).toBeNull();
   });
 });
 

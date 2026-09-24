@@ -1,10 +1,11 @@
 <template>
   <b-dropdown
+    :key="appendToBody ? 'portal' : 'inline'"
     ref="dropdownRef"
     class="tr-mobile-filters"
     :position="positionRef"
     aria-role="menu"
-    append-to-body
+    :append-to-body="appendToBody"
     @active-change="onActiveChange"
   >
     <template #trigger>
@@ -26,9 +27,13 @@
 </template>
 
 <script setup>
-import { nextTick, ref, useTemplateRef } from "vue";
+import { nextTick, onMounted, ref, useTemplateRef } from "vue";
 
-import { POSITIONS, useDropdownOverlay } from "../composables/useDropdownOverlay.js";
+import {
+  POSITIONS,
+  resolveDropdownPlacement,
+  useDropdownOverlay,
+} from "../composables/useDropdownOverlay.js";
 
 /**
  * Below `Toolbar`'s filter-pill breakpoint, the inline filters are hidden
@@ -43,13 +48,16 @@ import { POSITIONS, useDropdownOverlay } from "../composables/useDropdownOverlay
  * non-Russian consumer).
  * Slot: default — the filters panel content.
  *
- * `append-to-body` is mandatory: the menu holds nested filters that may
- * otherwise clip against the toolbar's stacking context, and its z-index
- * must live independently of the toolbar. The overlay composable installs
+ * Placement follows `resolveDropdownPlacement`: the panel stays inline
+ * unless an ancestor clips overflow, in which case it moves to a body
+ * portal (`append-to-body`) so the nested filters are not cut off; inside
+ * a modal, drawer or another dropdown menu it always stays inline to keep
+ * that stacking context. For the portal, the overlay composable installs
  * the `tr-dropdown-overlay-portal` marker on the body wrapper Buefy
  * creates and lowers Buefy's `z-index: 99` to the `@iam3xtr/ui`
  * `--tr-z-dropdown` token via `!important`, so the menu cannot float
- * above `b-modal` / `b-sidebar`.
+ * above `b-modal` / `b-sidebar`. Buefy's mobile-modal presentation is
+ * left to Buefy (no flip, coordinates or z-index override).
  *
  * Requires Buefy (`b-dropdown`, `b-button`).
  */
@@ -108,13 +116,22 @@ const refreshRefs = () => {
 
 const positionRef = ref(/** @type {(typeof POSITIONS)[number]} */ ("is-bottom-left"));
 
+// Buefy creates its body wrapper only in `mounted()`, so the placement is
+// resolved once the inline root is in the document; switching it remounts
+// `b-dropdown` through its `key`.
+const appendToBody = ref(false);
+onMounted(() => {
+  const rootEl = dropdownRef.value?.$el ?? null;
+  appendToBody.value = resolveDropdownPlacement(rootEl) === "portal";
+});
+
 useDropdownOverlay({
   triggerRef,
   menuRef,
   wrapperRef,
   activeRef: isActive,
   positionRef,
-  appendToBody: true,
+  appendToBody,
 });
 
 const onActiveChange = async (next) => {

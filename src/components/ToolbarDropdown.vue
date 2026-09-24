@@ -1,9 +1,11 @@
 <template>
   <b-dropdown
+    :key="appendToBody ? 'portal' : 'inline'"
     ref="dropdownRef"
     v-model="model"
     class="tr-dropdown tr-toolbar-dropdown"
     :position="positionRef"
+    :append-to-body="appendToBody"
     aria-role="list"
     expanded
     @active-change="onActiveChange"
@@ -38,9 +40,13 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, useTemplateRef } from "vue";
+import { computed, nextTick, onMounted, ref, useTemplateRef } from "vue";
 
-import { POSITIONS, useDropdownOverlay } from "../composables/useDropdownOverlay.js";
+import {
+  POSITIONS,
+  resolveDropdownPlacement,
+  useDropdownOverlay,
+} from "../composables/useDropdownOverlay.js";
 
 /**
  * @typedef {Object} ToolbarDropdownOption
@@ -62,7 +68,10 @@ import { POSITIONS, useDropdownOverlay } from "../composables/useDropdownOverlay
  * overlays following content and flips upward when there is no room below
  * the trigger. The composable drives the `b-dropdown`'s `position` prop
  * through a local ref; Buefy reactively re-renders the wrapper class on
- * every flip.
+ * every flip. The menu renders inline unless an ancestor clips overflow,
+ * in which case it moves to a body portal (`append-to-body`); inside a
+ * modal, drawer or another dropdown menu it always stays inline to keep
+ * that stacking context (see `resolveDropdownPlacement`).
  *
  * Requires Buefy (`b-dropdown`, `b-dropdown-item`, `b-icon`).
  */
@@ -121,15 +130,30 @@ const refreshRefs = () => {
   // menu live inside it for inline mode.
   const dropdownEl = dropdownRef.value?.$el ?? dropdownRef.value;
   if (!dropdownEl) return;
-  wrapperRef.value = dropdownEl.classList?.contains("dropdown")
+  const rootEl = dropdownEl.classList?.contains("dropdown")
     ? dropdownEl
     : (dropdownEl.querySelector?.(".dropdown") ?? dropdownEl);
-  menuRef.value = wrapperRef.value?.querySelector?.(".dropdown-menu") ?? null;
-  const trigger = wrapperRef.value?.querySelector?.(".dropdown-trigger");
+  // In portal mode Buefy moves `$refs.dropdownMenu` into a body-side
+  // `.dropdown` wrapper; the marker belongs on that wrapper.
+  const menu = dropdownRef.value?.$refs?.dropdownMenu
+    ?? rootEl?.querySelector?.(".dropdown-menu")
+    ?? null;
+  menuRef.value = menu;
+  wrapperRef.value = menu?.closest?.(".dropdown") ?? rootEl;
+  const trigger = rootEl?.querySelector?.(".dropdown-trigger");
   if (trigger) triggerRef.value = trigger;
 };
 
 const positionRef = ref(/** @type {(typeof POSITIONS)[number]} */ ("is-bottom-left"));
+
+// Buefy creates its body wrapper only in `mounted()`, so the placement is
+// resolved once the inline root is in the document; switching it remounts
+// `b-dropdown` through its `key`.
+const appendToBody = ref(false);
+onMounted(() => {
+  const rootEl = dropdownRef.value?.$el ?? null;
+  appendToBody.value = resolveDropdownPlacement(rootEl) === "portal";
+});
 
 useDropdownOverlay({
   triggerRef,
@@ -137,7 +161,7 @@ useDropdownOverlay({
   wrapperRef,
   activeRef: isActive,
   positionRef,
-  appendToBody: false,
+  appendToBody,
 });
 
 const onActiveChange = async (next) => {
