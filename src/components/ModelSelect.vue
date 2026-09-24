@@ -45,6 +45,7 @@
           v-model="searchQuery"
           :data="visibleOptions"
           field="name"
+          clear-on-select
           open-on-focus
           dropdown-position="bottom"
           :placeholder="searchPlaceholder"
@@ -335,7 +336,6 @@ function openPicker() {
   const trigger = triggerButton();
   if (trigger && typeof trigger.click === "function") {
     searchQuery.value = "";
-    emit("update:query", "");
     trigger.click();
   }
 }
@@ -423,7 +423,6 @@ function onActiveChange(next) {
     nextTick().then(() => {
       refreshRefs();
       searchQuery.value = "";
-      emit("update:query", "");
       searchInput()?.focus();
     });
   } else {
@@ -431,6 +430,8 @@ function onActiveChange(next) {
   }
 }
 
+// The single `update:query` source: it fires only when the query really
+// changes, so resetting an already empty query on open emits nothing.
 watch(searchQuery, (value) => {
   emit("update:query", value);
 });

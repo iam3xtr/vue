@@ -286,6 +286,54 @@ describe("ModelSelect — trigger / overlay lifecycle", () => {
     wrapper.findComponent({ name: "BAutocomplete" }).vm.$emit("select", option);
   }
 
+  it("emits update:query only on real query changes and never the selected model name", async () => {
+    const wrapper = mountModel({
+      models,
+      recommendedModels: ["gpt"],
+      searchResults: [models[1]],
+      modelValue: "gpt",
+    });
+    const autocomplete = wrapper.findComponent({ name: "BAutocomplete" });
+
+    // Opening with an already empty query is not a query change.
+    await openWithArrowDown(wrapper);
+    expect(isOpen(wrapper)).toBe(true);
+    expect(wrapper.emitted("update:query")).toBeUndefined();
+
+    await autocomplete.find("input").setValue("cl");
+    await settle();
+
+    // Go through Buefy's own selection path, which writes into the
+    // autocomplete's v-model after emitting `select`.
+    autocomplete.vm.setSelected(models[1]);
+    await settle();
+    expect(isOpen(wrapper)).toBe(false);
+    expect(wrapper.emitted("update:modelValue")?.at(-1)).toEqual(["claude"]);
+
+    // Reopening after the selection cleared the query emits nothing more.
+    await openWithArrowDown(wrapper);
+    expect(isOpen(wrapper)).toBe(true);
+
+    expect(wrapper.emitted("update:query")).toEqual([["cl"], [""]]);
+    wrapper.unmount();
+  });
+
+  it("emits a single empty update:query when reopening after an abandoned search", async () => {
+    const wrapper = mountModel({ models, recommendedModels: ["gpt"], modelValue: "gpt" });
+    await openWithArrowDown(wrapper);
+    await wrapper.findComponent({ name: "BAutocomplete" }).find("input").setValue("mis");
+    await settle();
+
+    await triggerButton(wrapper).trigger("click");
+    await settle();
+    expect(isOpen(wrapper)).toBe(false);
+
+    await openWithArrowDown(wrapper);
+    expect(isOpen(wrapper)).toBe(true);
+    expect(wrapper.emitted("update:query")).toEqual([["mis"], [""]]);
+    wrapper.unmount();
+  });
+
   it("reopens with ArrowDown after the popup was opened and closed once", async () => {
     const wrapper = mountModel({ models, recommendedModels: ["gpt"], modelValue: "gpt" });
     await openWithArrowDown(wrapper);
