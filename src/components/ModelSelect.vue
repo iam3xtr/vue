@@ -73,7 +73,28 @@
           </template>
 
           <template #empty>
-            <p class="tr-model-select__empty">{{ emptyLabel }}</p>
+            <p
+              v-if="error"
+              class="tr-model-select__empty tr-model-select__empty--error"
+              role="alert"
+            >
+              {{ errorLabel }}
+            </p>
+            <p
+              v-else-if="loading"
+              class="tr-model-select__empty tr-model-select__empty--loading"
+              role="status"
+              aria-busy="true"
+            >
+              {{ loadingLabel }}
+            </p>
+            <p
+              v-else
+              class="tr-model-select__empty"
+              role="status"
+            >
+              {{ emptyLabel }}
+            </p>
           </template>
         </b-autocomplete>
       </div>
@@ -126,9 +147,12 @@ import {
  * - `searchResults`: array of full `model` entries shown when the
  *   query is non-empty; `update:query` is emitted as the user types so
  *   the consumer can filter or fetch asynchronously.
- * - `loading` and `error` are read by the consumer and communicated
- *   through consumer-owned copy above/below the picker; the component
- *   stays i18n-neutral and ships no built-in loading/error chrome.
+ * - `loading` and `error`: consumer-driven request state. When the
+ *   visible list is empty the popup shows exactly one caller-provided
+ *   message with priority error > loading > empty: `errorLabel`
+ *   (`role="alert"`), `loadingLabel` (`role="status"`,
+ *   `aria-busy="true"`) or `emptyLabel` (`role="status"`). The
+ *   component stays i18n-neutral and ships no built-in strings.
  * - `invalid`: validation state on the closed trigger (`is-danger` +
  *   `aria-invalid`); the popup is hidden while closed, so this is what
  *   a screen reader or form-error summary sees.
@@ -207,6 +231,14 @@ const props = defineProps({
     default: null,
   },
   emptyLabel: {
+    type: String,
+    default: "",
+  },
+  loadingLabel: {
+    type: String,
+    default: "",
+  },
+  errorLabel: {
     type: String,
     default: "",
   },

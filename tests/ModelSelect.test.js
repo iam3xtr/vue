@@ -195,6 +195,70 @@ describe("ModelSelect — public catalog contract (mode=model)", () => {
   });
 });
 
+describe("ModelSelect — open popup loading / empty / error states", () => {
+  const labels = {
+    emptyLabel: "Nothing found",
+    loadingLabel: "Loading models",
+    errorLabel: "Could not load models",
+  };
+
+  async function openEmptyPopup(props) {
+    const wrapper = mountModel({
+      models,
+      recommendedModels: [],
+      searchResults: [],
+      modelValue: null,
+      ...labels,
+      ...props,
+    });
+    await wrapper.find(".tr-model-select__popup input").trigger("focus");
+    await nextTick();
+    return wrapper;
+  }
+
+  function emptyMessage(wrapper) {
+    const messages = wrapper.findAll(".tr-model-select__empty");
+    expect(messages).toHaveLength(1);
+    return messages[0];
+  }
+
+  it("shows the caller-provided emptyLabel as a status when idle", async () => {
+    const wrapper = await openEmptyPopup({});
+    const message = emptyMessage(wrapper);
+    expect(message.text()).toBe("Nothing found");
+    expect(message.attributes("role")).toBe("status");
+    expect(message.attributes("aria-busy")).toBeUndefined();
+  });
+
+  it("shows the caller-provided loadingLabel with aria-busy while loading", async () => {
+    const wrapper = await openEmptyPopup({ loading: true });
+    const message = emptyMessage(wrapper);
+    expect(message.text()).toBe("Loading models");
+    expect(message.attributes("role")).toBe("status");
+    expect(message.attributes("aria-busy")).toBe("true");
+    expect(wrapper.find(".tr-model-select__popup").text()).not.toContain("Nothing found");
+  });
+
+  it("shows the caller-provided errorLabel as an alert and gives error priority over loading", async () => {
+    const wrapper = await openEmptyPopup({ loading: true, error: true });
+    const message = emptyMessage(wrapper);
+    expect(message.text()).toBe("Could not load models");
+    expect(message.attributes("role")).toBe("alert");
+    const popupText = wrapper.find(".tr-model-select__popup").text();
+    expect(popupText).not.toContain("Loading models");
+    expect(popupText).not.toContain("Nothing found");
+  });
+
+  it("switches the message when the consumer state changes while open", async () => {
+    const wrapper = await openEmptyPopup({ loading: true });
+    expect(emptyMessage(wrapper).text()).toBe("Loading models");
+    await wrapper.setProps({ loading: false });
+    expect(emptyMessage(wrapper).text()).toBe("Nothing found");
+    await wrapper.setProps({ error: true });
+    expect(emptyMessage(wrapper).text()).toBe("Could not load models");
+  });
+});
+
 describe("ModelSelect — package boundary (no Vue Router / no Pinia)", () => {
   it("imports and renders without importing vue-router or pinia", async () => {
     const wrapper = mountModel({
