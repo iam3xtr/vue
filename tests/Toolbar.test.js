@@ -38,10 +38,20 @@ describe("Toolbar", () => {
   it("renders the filters slot both inline and inside MobileFilters", () => {
     const wrapper = mount(Toolbar, {
       slots: { filters: '<span class="my-filter">F</span>' },
+      attachTo: document.body,
       global: global_,
     });
-    expect(wrapper.findAll(".my-filter")).toHaveLength(2);
-    expect(wrapper.findComponent(MobileFilters).exists()).toBe(true);
+    try {
+      // MobileFilters uses `append-to-body`: the inline copy lives under
+      // the wrapper, the body-portal copy lives directly under
+      // `document.body`. Both must be present so the consumer sees two
+      // semantically identical filter trees.
+      expect(wrapper.findAll(".my-filter")).toHaveLength(1);
+      expect(document.body.querySelectorAll(".my-filter")).toHaveLength(2);
+      expect(wrapper.findComponent(MobileFilters).exists()).toBe(true);
+    } finally {
+      wrapper.unmount();
+    }
   });
 
   it("falls back to the default slot when no actions slot is given", () => {

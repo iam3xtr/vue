@@ -38,12 +38,9 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, useTemplateRef, watch } from "vue";
+import { computed, nextTick, ref, useTemplateRef } from "vue";
 
-import {
-  DROPDOWN_OVERLAY_POSITIONS,
-  useDropdownOverlay,
-} from "../composables/useDropdownOverlay.js";
+import { POSITIONS, useDropdownOverlay } from "../composables/useDropdownOverlay.js";
 
 /**
  * @typedef {Object} ToolbarDropdownOption
@@ -53,7 +50,7 @@ import {
 
 /**
  * A single-select `b-dropdown` filter with a trailing "show all" option,
- * used used in `Toolbar`'s `filters` slot.
+ * used in `Toolbar`'s `filters` slot.
  *
  * Props: `options` (required — array of `{ value, label }` or plain
  * strings, in which case the string is used as both), `allLabel` (required
@@ -61,10 +58,11 @@ import {
  * when nothing is selected), `ariaLabel` (defaults to `allLabel`).
  * `v-model` (required): the selected `value`, or `""` for "all".
  *
- * Внутри вызывает общий overlay-composable, чтобы открытое меню
- * перекрывало следующий контент и переворачивалось вверх при
- * недостатке места снизу. Auto-flip управляет `b-dropdown`'s `position`
- * prop через локальный ref.
+ * Wires the shared `useDropdownOverlay` composable so the open menu
+ * overlays following content and flips upward when there is no room below
+ * the trigger. The composable drives the `b-dropdown`'s `position` prop
+ * through a local ref; Buefy reactively re-renders the wrapper class on
+ * every flip.
  *
  * Requires Buefy (`b-dropdown`, `b-dropdown-item`, `b-icon`).
  */
@@ -104,11 +102,12 @@ const selectedLabel = computed(() => {
 
 // --- Auto-flip wiring ------------------------------------------------
 //
-// `b-dropdown` не экспонирует свои `trigger`/`dropdownMenu`/`dropdown`
-// refs публично (это часть его private шаблона), поэтому мы ищем их
-// через `nextTick` после mount и обновляем refs при следующих рендерах
-// (на случай, если Buefy пересоздаёт узлы). Композабл принимает
-// element-refs и сам снимает listeners/portal marker на close/unmount.
+// `b-dropdown` does not expose its `trigger` / `dropdownMenu` / `dropdown`
+// refs publicly (they are part of its private render output), so we locate
+// them through the DOM after the wrapper mounts and again after each
+// `active-change` (Buefy toggles the `.dropdown-menu` with `v-show` and
+// may recreate nodes between renders). The composable consumes element refs
+// and handles its own listener + marker cleanup on close and unmount.
 
 const dropdownRef = useTemplateRef("dropdownRef");
 const triggerRef = useTemplateRef("triggerRef");
@@ -117,19 +116,20 @@ const menuRef = ref(/** @type {HTMLElement|null} */ (null));
 const isActive = ref(false);
 
 const refreshRefs = () => {
+  // The Buefy component instance is the same Vue proxy across renders; the
+  // `$el` of a `b-dropdown` is the inner `.dropdown` root. The trigger and
+  // menu live inside it for inline mode.
   const dropdownEl = dropdownRef.value?.$el ?? dropdownRef.value;
   if (!dropdownEl) return;
-  // Корневой `.dropdown` Buefy — это сам элемент `b-dropdown`. Если
-  // Buefy рендерит вложенный div, ищем ближайший `.dropdown` ancestor.
   wrapperRef.value = dropdownEl.classList?.contains("dropdown")
     ? dropdownEl
-    : dropdownEl.querySelector?.(".dropdown") ?? dropdownEl;
+    : (dropdownEl.querySelector?.(".dropdown") ?? dropdownEl);
   menuRef.value = wrapperRef.value?.querySelector?.(".dropdown-menu") ?? null;
+  const trigger = wrapperRef.value?.querySelector?.(".dropdown-trigger");
+  if (trigger) triggerRef.value = trigger;
 };
 
-const positionRef = ref(/** @type {typeof DROPDOWN_OVERLAY_POSITIONS[number]} */ (
-  "is-bottom-left"
-));
+const positionRef = ref(/** @type {(typeof POSITIONS)[number]} */ ("is-bottom-left"));
 
 useDropdownOverlay({
   triggerRef,
@@ -140,21 +140,16 @@ useDropdownOverlay({
   appendToBody: false,
 });
 
-// `active-change` — единственный публичный сигнал Buefy об открытии/
-// закрытии. Не пытаемся читать `v-model` через `dropdownRef` (Buefy не
-// публикует `isActive` через ref API).
-const onActiveChange = (next) => {
+const onActiveChange = async (next) => {
   isActive.value = !!next;
-};
-
-// После первого открытия Buefy создаёт `.dropdown-menu` (он скрыт при
-// закрытии через `v-show`); обновляем refs, чтобы композабл видел
-// актуальные элементы.
-watch(isActive, async (next) => {
-  if (!next) return;
+  // Re-locate the trigger and menu AFTER Buefy has flipped
+  // `isActive` and run its own `nextTick`-deferred DOM updates, so the
+  // first open does not race the composable's measurement.
   await nextTick();
   refreshRefs();
-});
-
-defineExpose({ refreshRefs });
+  // The composable waits two ticks internally; nudging it once more makes
+  // sure its first apply() sees populated refs even when the host of the
+  // dropdown is itself a child of another deferred mount.
+  if (next) await nextTick();
+};
 </script>

@@ -3,17 +3,19 @@ import { mount } from "@vue/test-utils";
 import { defineComponent, h, nextTick, ref } from "vue";
 
 import {
+  POSITIONS,
   useDropdownOverlay,
   DROPDOWN_OVERLAY_MARKER,
-  DROPDOWN_OVERLAY_POSITIONS,
 } from "../src/composables/useDropdownOverlay.js";
 
 // ------------------------------------------------------------------
-// Тестовые хелперы
+// Test helpers
 // ------------------------------------------------------------------
 
-// jsdom не считает layout, поэтому `getBoundingClientRect` возвращает нули.
-// Подменяем ответы per-element.
+// jsdom does not compute layout, so `getBoundingClientRect()` returns
+// zeros by default. We override the method per-element, and use
+// `Object.defineProperty` for `offsetHeight` because jsdom 30 ships
+// that property as a read-only getter.
 const setRect = (el, rect) => {
   el.getBoundingClientRect = () => ({
     x: rect.x ?? 0,
@@ -25,17 +27,23 @@ const setRect = (el, rect) => {
     right: rect.right ?? (rect.left ?? 0) + (rect.width ?? 0),
     bottom: rect.bottom ?? (rect.top ?? 0) + (rect.height ?? 0),
   });
-  el.offsetHeight = rect.offsetHeight ?? rect.height ?? 0;
-  el.offsetWidth = rect.offsetWidth ?? rect.width ?? 0;
+  Object.defineProperty(el, "offsetHeight", {
+    value: rect.offsetHeight ?? rect.height ?? 0,
+    configurable: true,
+  });
+  Object.defineProperty(el, "offsetWidth", {
+    value: rect.offsetWidth ?? rect.width ?? 0,
+    configurable: true,
+  });
 };
 
 const flushMicro = () => new Promise((r) => setTimeout(r, 0));
 const flushFrame = () => new Promise((r) => requestAnimationFrame(() => r(undefined)));
 
-/**
- * Создаёт harness с явным набором ref-ов. Возвращает кортеж для удобной
- * распаковки: `const { wrapper, refs, Harness } = makeHarness()`.
- */
+// Builds a harness that mounts a synthetic `.dropdown` (the Buefy
+// shape we depend on) and routes the four element refs to a fresh
+// composition tree. The harness itself owns the refs so tests can
+// override rects and assert on the resulting position class.
 function makeHarness({ appendToBody = false } = {}) {
   const refs = {
     wrapperRef: ref(null),
@@ -57,7 +65,7 @@ function makeHarness({ appendToBody = false } = {}) {
       });
       return () =>
         h("div", { ref: refs.wrapperRef, class: "dropdown" }, [
-          h("button", { ref: refs.triggerRef, class: "trigger" }, "Open"),
+          h("button", { ref: refs.triggerRef, class: "dropdown-trigger" }, "Open"),
           h("div", { ref: refs.menuRef, class: "dropdown-menu" }, [
             h("div", { class: "dropdown-content" }, [
               h("a", { class: "dropdown-item" }, "Item"),
@@ -71,7 +79,7 @@ function makeHarness({ appendToBody = false } = {}) {
 }
 
 // ------------------------------------------------------------------
-// Тесты
+// Tests
 // ------------------------------------------------------------------
 
 describe("useDropdownOverlay", () => {
@@ -109,7 +117,7 @@ describe("useDropdownOverlay", () => {
   it("exposes the documented contract from the package entrypoint", () => {
     expect(typeof useDropdownOverlay).toBe("function");
     expect(DROPDOWN_OVERLAY_MARKER).toBe("tr-dropdown-overlay");
-    expect(DROPDOWN_OVERLAY_POSITIONS).toEqual([
+    expect(POSITIONS).toEqual([
       "is-bottom-left",
       "is-bottom-right",
       "is-top-left",
@@ -152,7 +160,6 @@ describe("useDropdownOverlay", () => {
 
   it("leaves the position alone when neither direction has enough space (no over-promise)", async () => {
     ({ refs } = mountFresh());
-    // Меню больше, чем свободное место и сверху, и снизу — флип не помогает.
     setRect(refs.triggerRef.value, { top: 400, bottom: 430, height: 30 });
     setRect(refs.menuRef.value, { height: 1000 });
     refs.positionRef.value = "is-bottom-left";
@@ -241,7 +248,7 @@ describe("useDropdownOverlay", () => {
     await nextTick();
     await flushMicro();
     expect(refs.positionRef.value).toBe("is-bottom-left");
-    // Имитируем scroll: триггер теперь у нижней границы.
+    // Trigger now sits against the lower viewport edge after a scroll.
     setRect(refs.triggerRef.value, { top: 720, bottom: 750, height: 30 });
     window.dispatchEvent(new Event("scroll"));
     await flushFrame();
@@ -252,9 +259,6 @@ describe("useDropdownOverlay", () => {
     ({ refs } = mountFresh());
     setRect(refs.triggerRef.value, { top: 100, bottom: 130, height: 30 });
     setRect(refs.menuRef.value, { height: 120 });
-    // Никаких listener-ов на document.click/document.keyup — это контракт
-    // Buefy (`clickedOutside`/`keyPress`). Composables должен использоватьть
-    // только window scroll/resize, без подмены global-семантики.
     const addSpy = vi.spyOn(document, "addEventListener");
     refs.activeRef.value = true;
     await nextTick();
@@ -262,5 +266,35 @@ describe("useDropdownOverlay", () => {
     const documentAdds = addSpy.mock.calls.map(([type]) => type);
     expect(documentAdds).not.toContain("click");
     expect(documentAdds).not.toContain("keyup");
+  });
+
+  it("restores the portal marker when Buefy wipes the wrapper classList", async () => {
+    ({ refs } = mountFresh({ appendToBody: true }));
+    setRect(refs.triggerRef.value, { top: 100, bottom: 130, height: 30 });
+    setRect(refs.menuRef.value, { height: 120 });
+    refs.activeRef.value = true;
+    await nextTick();
+    await flushMicro();
+    // Simulate Buefy's updateAppendToBody wiping the classList (it removes
+    // all classes and re-adds its own before applying the next position).
+    refs.wrapperRef.value.classList.remove("tr-dropdown-overlay-portal");
+    await nextTick();
+    expect(refs.wrapperRef.value.classList.contains("tr-dropdown-overlay-portal")).toBe(true);
+  });
+
+  it("keeps the lowered z-index when Buefy rewrites the menu style", async () => {
+    ({ refs } = mountFresh({ appendToBody: true }));
+    setRect(refs.triggerRef.value, { top: 100, bottom: 130, height: 30 });
+    setRect(refs.menuRef.value, { height: 120 });
+    refs.menuRef.value.style.setProperty("z-index", "99");
+    refs.activeRef.value = true;
+    await nextTick();
+    await flushMicro();
+    // Buefy's updateAppendToBody later overwrites the menu style.
+    refs.menuRef.value.style.setProperty("z-index", "99");
+    window.dispatchEvent(new Event("scroll"));
+    await flushFrame();
+    // The !important-priority write from the composable must win.
+    expect(refs.menuRef.value.style.getPropertyValue("z-index")).toBe("35");
   });
 });

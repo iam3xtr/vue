@@ -31,5 +31,5 @@ export { useFocusTrap } from "./composables/useFocusTrap.js";
 export {
   useDropdownOverlay,
   DROPDOWN_OVERLAY_MARKER,
-  POSITIONS as DROPDOWN_OVERLAY_POSITIONS,
+  POSITIONS,
 } from "./composables/useDropdownOverlay.js";

@@ -1,44 +1,52 @@
 // =============================================================================
-// useDropdownOverlay — общий positioning layer для `b-dropdown`
+// useDropdownOverlay — shared positioning layer for `b-dropdown`
 // =============================================================================
-// Зачем: Buefy 3.x поддерживает четыре `position` (`is-bottom-left` и т.д.),
-// но сам не делает flip к ближайшей границе и не обновляет координаты на
-// scroll/resize — меню может уехать за нижний край viewport. В обычном режиме
-// `.dropdown-menu` позиционируется CSS-классом, в `append-to-body` —
-// `updateAppendToBody()` один раз выставляет inline `top`/`left`/`z-index: 99`
-// и больше ничего не двигает. Этот composable:
 //
-//   - измеряет trigger/menu/viewport при открытии и на scroll/resize;
-//   - при недостатке места снизу переключает позицию снизу наверх (и наоборот)
-//     и пишет итог в `position` ref, привязанный caller-ом к `b-dropdown`'s
-//     `position` prop;
-//   - ставит явный marker class на меню (и на body-обёртку, если portal),
-//     чтобы theme в `@iam3xtr/ui` стилизовал обе формы через одинаковые
-//     селекторы;
-//   - в body-режиме понижает Buefy `z-index: 99` до token-шкалы
-//     `@iam3xtr/ui` (`--tr-z-dropdown`, ниже modal/drawer), иначе portal
-//     перекрывал бы `b-modal`/`b-sidebar`;
-//   - снимает собственные listeners и pending frame на close/unmount и не
-//     трогает обработчики Buefy (Escape, outside-click, mobile-modal,
-//     focus trap, teleport lifecycle).
+// Buefy 3.x's `b-dropdown` supports four `position` classes
+// (`is-bottom-left`, `is-top-right`, etc.) but does not auto-flip away from
+// the viewport edge and does not reposition on scroll/resize. In inline mode
+// the menu is positioned purely by CSS, so changing the position class does
+// flip it; in `append-to-body` mode Buefy's `updateAppendToBody()` writes
+// inline `top`/`left`/`z-index: 99` once on every `isActive` change —
+// and clears the wrapper classList before re-applying its own classes. This
+// composable:
 //
-// SSR-safe: импорт не обращается к `window`/`document`. Вся браузерная работа —
-// в lifecycle hooks с парной очисткой.
+//   - measures the trigger and the open menu against the viewport at
+//     activation time and on every scroll/resize;
+//   - flips `is-bottom-*` ↔ `is-top-*` by writing into the `position` ref
+//     the caller has bound to `b-dropdown`'s `position` prop (Buefy then
+//     reactively re-renders the wrapper class);
+//   - re-installs the `tr-dropdown-overlay-portal` marker and the
+//     `--tr-z-dropdown`-scaled z-index AFTER every Buefy re-render
+//     (`isActive` change, scroll, resize) so the values Buefy writes back
+//     cannot win specificity: the portal marker is restored via a
+//     `MutationObserver` on the wrapper classList, and the z-index uses
+//     `style.setProperty('z-index', z, 'important')`;
+//   - keeps its own scroll/resize listeners (capture phase, so they fire
+//     before Buefy's) and removes them on close/unmount together with any
+//     pending rAF callback;
+//   - does NOT call Buefy private methods (`updateAppendToBody`,
+//     `clickedOutside`, `keyPress`, mobile-modal handlers, focus-trap
+//     directive) and does not replace any of Buefy's own listeners.
+//
+// SSR-safe: this module does not touch `window`/`document` at import time.
+// All DOM access happens inside lifecycle hooks with paired cleanup.
 
 import { nextTick, onBeforeUnmount, watch } from "vue";
 
-// Один источник истины для marker class: и inline, и body-portal меню должны
-// попадать под одинаковые theme-селекторы (см. `.tr-dropdown-overlay` в
-// `@iam3xtr/ui/theme.scss`).
+// Marker on the menu itself (inline AND portal). One source of truth so the
+// `@iam3xtr/ui` theme can style both forms through a single selector.
 export const DROPDOWN_OVERLAY_MARKER = "tr-dropdown-overlay";
 
-// Marker на body-обёртке, чтобы theme мог отличить portal от inline меню
-// (например, шириной, привязкой к content-gutter, отличной реакцией на
-// `clip-path`/transform-предков).
+// Marker on the body-portal wrapper, so the theme can distinguish a portal
+// from an inline menu (different width strategy, content-gutter behaviour,
+// clipping-ancestor reaction). Survives Buefy's classList wipe via a
+// `MutationObserver` re-applied on each open.
 const PORTAL_MARKER = "tr-dropdown-overlay-portal";
 
-// Четыре Buefy позиции. Caller привязывает итоговую позицию к `b-dropdown`'s
-// `position` prop через `positionRef`.
+// The four Buefy positions. The composable writes the chosen one back into
+// `positionRef`; the caller binds that ref to `b-dropdown`'s `position` prop
+// and Buefy reacts with a class swap.
 export const POSITIONS = /** @type {const} */ ([
   "is-bottom-left",
   "is-bottom-right",
@@ -48,26 +56,31 @@ export const POSITIONS = /** @type {const} */ ([
 
 const isBottom = (pos) => pos === "is-bottom-left" || pos === "is-bottom-right";
 
-// Флип вертикали (`-bottom-*` ↔ `-top-*`); горизонталь вызова сохраняется.
+// Flip vertical (-bottom-* ↔ -top-*); horizontal side is preserved so a
+// `is-bottom-right` flips to `is-top-right`, not `is-top-left`.
 const flipVertical = (pos) =>
   isBottom(pos) ? pos.replace("is-bottom-", "is-top-") : pos.replace("is-top-", "is-bottom-");
 
-// Глобальный z-index токен. Theme объявляет его в `:root` через
-// `--tr-z-dropdown` (см. tokens.scss). При отсутствии CSS-переменной
-// падаем на согласованное число, совпадающее со шкалой Bulma-token.
+// Z-index fallback matching the `tokens.scss` `--tr-z-dropdown` literal
+// when the CSS custom property has not yet been computed (theme not yet
+// applied, SSR, etc.).
 const FALLBACK_Z = 35;
 
 const readZ = () => {
   if (typeof document === "undefined") return FALLBACK_Z;
-  const raw = getComputedStyle(document.documentElement)
+  // `getComputedStyle` is a `window` global in browsers; access it through
+  // `window` so the composable keeps working in jsdom-style sandboxes that
+  // only expose it on `window`, not on the bare global.
+  const gcs = (typeof window !== "undefined" && window.getComputedStyle)
+    || (typeof globalThis !== "undefined" && globalThis.getComputedStyle);
+  if (!gcs) return FALLBACK_Z;
+  const raw = gcs(document.documentElement)
     .getPropertyValue("--tr-z-dropdown")
     .trim();
   const n = Number.parseInt(raw, 10);
   return Number.isFinite(n) ? n : FALLBACK_Z;
 };
 
-// `requestAnimationFrame` единожды на одно открытие/scroll-событие, чтобы не
-// дёргать измерения чаще, чем экран успевает перерисоваться.
 const scheduleFrame = (cb) => {
   if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
     cb();
@@ -82,7 +95,7 @@ const scheduleFrame = (cb) => {
   };
 };
 
-const VIEWPORT_EDGE_GAP = 8; // px от границы viewport, после которого флипаем
+const VIEWPORT_EDGE_GAP = 8;
 
 const spaceBelow = (rect) =>
   (typeof window !== "undefined" ? window.innerHeight : 0) - rect.bottom;
@@ -90,37 +103,23 @@ const spaceAbove = (rect) => rect.top;
 
 /**
  * @typedef {Object} UseDropdownOverlayOptions
- * @property {import("vue").Ref<HTMLElement|null>} triggerRef — триггер-кнопка
- *   (или другой anchor-элемент). Используется для измерения положения
- *   относительно viewport.
- * @property {import("vue").Ref<HTMLElement|null>} menuRef — `.dropdown-menu`,
- *   который Buefy создаёт (для portal: после `append-to-body` он живёт в
- *   body; для inline: внутри корня `.dropdown`). Composables использует его
- *   для измерения размеров и для marker/z-index.
- * @property {import("vue").Ref<HTMLElement|null>} wrapperRef — корневой
- *   `.dropdown` (inline) или body-обёртка (portal). Принимает
- *   `tr-dropdown-overlay-portal` marker в portal-режиме.
- * @property {import("vue").Ref<boolean>} activeRef — текущее состояние
- *   открытия (зеркало Buefy `active-change`).
- * @property {import("vue").Ref<string>} positionRef — двунаправленная
- *   связь с Buefy `position` prop. Caller инициализирует стартовой
- *   позицией; composable пишет сюда вычисленную позицию, чтобы Buefy
- *   перерисовал класс корня и CSS-позиционирование.
- * @property {boolean} [appendToBody] — признак body-portal режима; включает
- *   portal marker и z-index override.
- * @property {number} [edgeGap] — отступ от границы viewport (px), после
- *   которого флипаем. По умолчанию 8.
+ * @property {import("vue").Ref<HTMLElement|null>} triggerRef — trigger button (or any anchor element). Used to measure its position relative to the viewport.
+ * @property {import("vue").Ref<HTMLElement|null>} menuRef — `.dropdown-menu` Buefy renders. In portal mode Buefy moves it into a body wrapper; the caller is responsible for keeping this ref current (see `MobileFilters.vue` for the Buefy `$refs.dropdownMenu` lookup).
+ * @property {import("vue").Ref<HTMLElement|null>} wrapperRef — `.dropdown` root Buefy renders. In inline mode this is the original root; in `append-to-body` mode this is the body-portal wrapper Buefy creates. The portal marker is installed on this element.
+ * @property {import("vue").Ref<boolean>} activeRef — mirror of Buefy's `active-change` event. The composable reacts to its changes; the caller wires the event into the ref.
+ * @property {import("vue").Ref<string>} positionRef — two-way binding to Buefy's `position` prop. Caller seeds it; composable writes the flipped value back so Buefy reactively re-renders the wrapper class.
+ * @property {boolean} [appendToBody] — when true the composable also rewrites `top`/`left` (Buefy only writes them once on open) and lowers z-index via `!important` to the token scale (`--tr-z-dropdown`, below modal/drawer), so the portal cannot float above them.
+ * @property {number} [edgeGap] — minimum free space to keep before flipping (px). Default 8.
+ * @property {import("vue").Ref<HTMLElement|null>} [portalRef] — for body-portal mode: the outer body wrapper Buefy creates (`<div style="position:absolute">`). The composable can use it to find the menu by walking up from the portal wrapper when `menuRef` is not yet populated. Optional: when omitted, the composable relies on `menuRef` alone.
  */
 
 /**
- * Подключает auto-flip + portal marker + token z-index к существующему
- * `b-dropdown`. Не вызывает private Buefy-методы и не подменяет его
- * обработчики Escape/outside-click/mobile-modal/focus-trap.
+ * Connects auto-flip, portal marker and token-scaled z-index to an existing
+ * `b-dropdown`. Does not call any private Buefy method and does not replace
+ * Buefy's own Escape / outside-click / mobile-modal / focus-trap handlers.
  *
  * @param {UseDropdownOverlayOptions} options
- * @returns {{
- *   reapply: () => void,
- * }}
+ * @returns {{ reapply: () => void }}
  */
 export function useDropdownOverlay(options) {
   const {
@@ -131,16 +130,14 @@ export function useDropdownOverlay(options) {
     positionRef,
     appendToBody = false,
     edgeGap = VIEWPORT_EDGE_GAP,
+    portalRef,
   } = options;
 
-  // Сохраняем оригинальный Buefy-выставленный `z-index`, чтобы восстановить
-  // его при закрытии — иначе закрытое меню оставит бы стиль у body-обёртки
-  // видимым до повторного открытия.
-  let originalZ = null;
+  // Buefy's stored `z-index` for the body portal (literal `"99"` from
+  // `updateAppendToBody`). We re-apply our token-scaled value on top with
+  // `!important` so subsequent Buefy re-renders cannot win specificity.
   let detachFns = [];
   let cancelFrame = null;
-  let portalMarkerApplied = false;
-  let menuMarkerApplied = false;
   let listenersAttached = false;
 
   const detachListeners = () => {
@@ -153,52 +150,6 @@ export function useDropdownOverlay(options) {
     listenersAttached = false;
   };
 
-  const setZIndex = (el) => {
-    if (!el) return;
-    const z = readZ();
-    if (originalZ == null) {
-      const inline = el.style.getPropertyValue("z-index");
-      originalZ = inline || null;
-    }
-    el.style.setProperty("z-index", String(z));
-  };
-
-  const restoreZIndex = (el) => {
-    if (!el) return;
-    if (originalZ != null) {
-      el.style.setProperty("z-index", originalZ);
-    } else {
-      el.style.removeProperty("z-index");
-    }
-    originalZ = null;
-  };
-
-  const setPortalMarker = (on) => {
-    const wrapper = wrapperRef.value;
-    if (!wrapper) return;
-    if (on && !wrapper.classList.contains(PORTAL_MARKER)) {
-      wrapper.classList.add(PORTAL_MARKER);
-      portalMarkerApplied = true;
-    } else if (!on && wrapper.classList.contains(PORTAL_MARKER)) {
-      wrapper.classList.remove(PORTAL_MARKER);
-      portalMarkerApplied = false;
-    }
-  };
-
-  const removePortalMarker = () => setPortalMarker(false);
-
-  const setMenuMarker = (on) => {
-    const menu = menuRef.value;
-    if (!menu) return;
-    if (on && !menu.classList.contains(DROPDOWN_OVERLAY_MARKER)) {
-      menu.classList.add(DROPDOWN_OVERLAY_MARKER);
-      menuMarkerApplied = true;
-    } else if (!on && menu.classList.contains(DROPDOWN_OVERLAY_MARKER)) {
-      menu.classList.remove(DROPDOWN_OVERLAY_MARKER);
-      menuMarkerApplied = false;
-    }
-  };
-
   const measure = () => {
     const trigger = triggerRef.value;
     const menu = menuRef.value;
@@ -209,12 +160,6 @@ export function useDropdownOverlay(options) {
     };
   };
 
-  // Решаем, нужно ли флипнуть. Решение принимается по triggerRect (положение
-  // триггера в viewport) — меню в inline-режиме позиционируется относительно
-  // него же, так что координата trigger.bottom + menuHeight предсказывает
-  // нижнюю границу меню; в body-режиме это менее точно (Buefy использует
-  // scrollY + rect.top + trigger.clientHeight), но для флипа достаточно
-  // знать, помещается ли меню снизу в видимой области.
   const decide = (position, m) => {
     if (!m) return position;
     const { triggerRect, menuRect } = m;
@@ -231,11 +176,81 @@ export function useDropdownOverlay(options) {
     return position;
   };
 
-  // Применяем решение: пишем итоговую позицию в positionRef (Buefy
-  // реактивно пересчитает классы и CSS-позицию), для body-portal ещё
-  // корректируем inline top вручную, поскольку Buefy рисует portal один
-  // раз и сам не обновляет координаты после смены position.
-  const apply = () => {
+  const applyPortalMarker = () => {
+    const wrapper = wrapperRef.value;
+    if (!wrapper) return;
+    if (!wrapper.classList.contains(PORTAL_MARKER)) {
+      wrapper.classList.add(PORTAL_MARKER);
+    }
+  };
+
+  const applyMenuMarker = () => {
+    const menu = menuRef.value;
+    if (!menu) return;
+    if (!menu.classList.contains(DROPDOWN_OVERLAY_MARKER)) {
+      menu.classList.add(DROPDOWN_OVERLAY_MARKER);
+    }
+  };
+
+  // Apply token-scaled z-index with `!important` so Buefy's later
+  // `style.setProperty('z-index', '99')` calls in `updateAppendToBody`
+  // (re-fired on every `isActive` change) cannot re-override us. The third
+  // argument to `setProperty` is the priority; only inline `!important` can
+  // beat inline `!important`, which Buefy never uses.
+  const applyZIndex = () => {
+    const menu = menuRef.value;
+    if (!menu) return;
+    const z = readZ();
+    menu.style.setProperty("z-index", String(z), "important");
+  };
+
+  // Recompute inline `top`/`left` for body-portal mode. Buefy's
+  // `updateAppendToBody` only writes these once per open and does not track
+  // scroll/resize, so we re-derive from the trigger's bounding rect every
+  // time the user scrolls or resizes.
+  const applyPortalCoords = () => {
+    const menu = menuRef.value;
+    const trigger = triggerRef.value;
+    if (!menu || !trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const menuH = menu.getBoundingClientRect().height || 0;
+    const triggerH = trigger.offsetHeight || 0;
+    const position = positionRef.value;
+    let top = rect.top + (typeof window !== "undefined" ? window.scrollY : 0);
+    let left = rect.left + (typeof window !== "undefined" ? window.scrollX : 0);
+    if (isBottom(position)) {
+      top += triggerH;
+    } else {
+      top -= menuH;
+    }
+    if (position.endsWith("-left")) {
+      // Buefy aligns the menu's right edge with the trigger's right edge in
+      // `-right` mode; in `-left` (default) it aligns the left edges, which
+      // is exactly the same as `rect.left`.
+    } else {
+      left = rect.right - menu.getBoundingClientRect().width;
+    }
+    menu.style.setProperty("top", `${top}px`);
+    menu.style.setProperty("left", `${left}px`);
+  };
+
+  // Idempotent re-apply after Buefy has finished its own `isActive` work
+  // (one watcher flush + one `$nextTick`). This is the central hook: every
+  // entry point that may race with `updateAppendToBody` (`activeRef` flips,
+  // scroll, resize) routes through here.
+  const apply = async () => {
+    // Wait for Buefy to finish mounting/repositioning. Buefy's `isActive`
+    // watcher calls `updateAppendToBody` inside `$nextTick`, so two flushes
+    // cover the typical open-then-render sequence; for `appendToBody` we
+    // also depend on the parent component's `refreshRefs` having populated
+    // `menuRef`/`wrapperRef`, which is itself triggered by `active-change`.
+    await nextTick();
+    await nextTick();
+
+    const trigger = triggerRef.value;
+    const menu = menuRef.value;
+    if (!trigger || !menu) return;
+
     const position = positionRef.value;
     const m = measure();
     const target = decide(position, m);
@@ -243,22 +258,11 @@ export function useDropdownOverlay(options) {
       positionRef.value = target;
     }
 
+    applyMenuMarker();
     if (appendToBody) {
-      const menu = menuRef.value;
-      const trigger = triggerRef.value;
-      if (menu && trigger) {
-        const rect = trigger.getBoundingClientRect();
-        const menuH = menu.getBoundingClientRect().height || 0;
-        const triggerH = trigger.offsetHeight || 0;
-        let top = rect.top + (typeof window !== "undefined" ? window.scrollY : 0);
-        if (isBottom(target)) {
-          top += triggerH;
-        } else {
-          top -= menuH;
-        }
-        menu.style.setProperty("top", `${top}px`);
-        setZIndex(menu);
-      }
+      applyPortalMarker();
+      applyZIndex();
+      applyPortalCoords();
     }
   };
 
@@ -278,26 +282,53 @@ export function useDropdownOverlay(options) {
     listenersAttached = true;
   };
 
+  // Continuously re-install the portal marker + token-scaled z-index while
+  // the menu is open. Buefy's `updateAppendToBody` rewrites both on every
+  // `isActive` change and only runs `clickedOutside` / `keyPress` on the
+  // document, so its handlers stay untouched. A rAF loop is the simplest
+  // reactive strategy that does not depend on MutationObserver firing
+  // through Buefy's `setProperty` path or on third-party timing — and it
+  // covers the corner cases we know about: Buefy's `isActive` watcher
+  // re-running after `selectItem`, after `appendToBodyCopyParent` clones,
+  // and after any Buefy version-specific re-render we have not measured.
+  let portalLoop = null;
+  const startPortalLoop = () => {
+    if (!appendToBody || typeof window === "undefined" || portalLoop) return;
+    const tick = () => {
+      applyPortalMarker();
+      applyMenuMarker();
+      applyZIndex();
+      portalLoop = window.requestAnimationFrame(tick);
+    };
+    portalLoop = window.requestAnimationFrame(tick);
+    detachFns.push(() => {
+      if (portalLoop) {
+        window.cancelAnimationFrame(portalLoop);
+        portalLoop = null;
+      }
+    });
+  };
+
   const onOpen = async () => {
-    setPortalMarker(appendToBody);
-    setMenuMarker(true);
-    if (appendToBody) {
-      setZIndex(menuRef.value);
-    }
+    // In portal mode Buefy needs one tick to mount the body wrapper and
+    // move `.dropdown-menu` into it; the caller typically populates
+    // `menuRef`/`wrapperRef` from its own `active-change` handler after
+    // `nextTick`. We chain one more `nextTick` here to be safe across
+    // call sites that populate refs synchronously vs. via a watcher.
     await nextTick();
-    apply();
     attachListeners();
+    apply();
+    startPortalLoop();
   };
 
   const onClose = () => {
     detachListeners();
-    if (appendToBody) {
-      restoreZIndex(menuRef.value);
-      removePortalMarker();
-    }
-    setMenuMarker(false);
   };
 
+  // `flush: 'post'` runs the handler AFTER all other watchers in the same
+  // flush — including Buefy's `isActive` watcher — but Buefy defers its
+  // actual `updateAppendToBody` call inside `$nextTick`, so `apply()`
+  // itself does a 2× nextTick wait before writing.
   watch(activeRef, (isActive) => {
     if (isActive) {
       onOpen();
@@ -308,12 +339,8 @@ export function useDropdownOverlay(options) {
 
   onBeforeUnmount(() => {
     onClose();
-    // На случай, если caller выкинул компонент, не сбросив marker на меню.
-    if (menuMarkerApplied) setMenuMarker(false);
-    if (portalMarkerApplied) removePortalMarker();
   });
 
-  // Экспортируем хелпер для тестов: ручной re-apply без ожидания rAF/scroll.
   return {
     reapply: () => apply(),
   };
