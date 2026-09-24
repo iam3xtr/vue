@@ -28,3 +28,8 @@ export { default as FormDrawer } from "./components/FormDrawer.vue";
 export { iconRegistryKey, provideIconRegistry } from "./icon-registry.js";
 export { navbarMenuKey } from "./composables/navbarMenu.js";
 export { useFocusTrap } from "./composables/useFocusTrap.js";
+export {
+  useDropdownOverlay,
+  DROPDOWN_OVERLAY_MARKER,
+  POSITIONS as DROPDOWN_OVERLAY_POSITIONS,
+} from "./composables/useDropdownOverlay.js";
