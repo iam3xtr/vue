@@ -192,6 +192,22 @@ export function useDropdownOverlay(options) {
     }
   };
 
+  const removeMenuMarker = () => {
+    const menu = menuRef.value;
+    if (!menu) return;
+    if (menu.classList.contains(DROPDOWN_OVERLAY_MARKER)) {
+      menu.classList.remove(DROPDOWN_OVERLAY_MARKER);
+    }
+  };
+
+  const removePortalMarkerOnce = () => {
+    const wrapper = wrapperRef.value;
+    if (!wrapper) return;
+    if (wrapper.classList.contains(PORTAL_MARKER)) {
+      wrapper.classList.remove(PORTAL_MARKER);
+    }
+  };
+
   // Apply token-scaled z-index with `!important` so Buefy's later
   // `style.setProperty('z-index', '99')` calls in `updateAppendToBody`
   // (re-fired on every `isActive` change) cannot re-override us. The third
@@ -207,28 +223,33 @@ export function useDropdownOverlay(options) {
   // Recompute inline `top`/`left` for body-portal mode. Buefy's
   // `updateAppendToBody` only writes these once per open and does not track
   // scroll/resize, so we re-derive from the trigger's bounding rect every
-  // time the user scrolls or resizes.
+  // time the user scrolls or resizes. Horizontal alignment matches Buefy's
+  // own `updateAppendToBody` formula exactly: in `*-right` positions the
+  // menu's left edge sits on the trigger's left edge (`left = rect.left`);
+  // in `*-left` positions the menu extends to the LEFT of the trigger
+  // (the menu's right edge stays on the trigger's right edge), so
+  // `left = rect.left - (menuW - triggerW)`.
   const applyPortalCoords = () => {
     const menu = menuRef.value;
     const trigger = triggerRef.value;
     if (!menu || !trigger) return;
     const rect = trigger.getBoundingClientRect();
     const menuH = menu.getBoundingClientRect().height || 0;
+    const menuW = menu.getBoundingClientRect().width || 0;
     const triggerH = trigger.offsetHeight || 0;
+    const triggerW = trigger.offsetWidth || 0;
     const position = positionRef.value;
-    let top = rect.top + (typeof window !== "undefined" ? window.scrollY : 0);
-    let left = rect.left + (typeof window !== "undefined" ? window.scrollX : 0);
+    const scrollX = typeof window !== "undefined" ? window.scrollX : 0;
+    const scrollY = typeof window !== "undefined" ? window.scrollY : 0;
+    let top = rect.top + scrollY;
+    let left = rect.left + scrollX;
     if (isBottom(position)) {
       top += triggerH;
     } else {
       top -= menuH;
     }
     if (position.endsWith("-left")) {
-      // Buefy aligns the menu's right edge with the trigger's right edge in
-      // `-right` mode; in `-left` (default) it aligns the left edges, which
-      // is exactly the same as `rect.left`.
-    } else {
-      left = rect.right - menu.getBoundingClientRect().width;
+      left -= menuW - triggerW;
     }
     menu.style.setProperty("top", `${top}px`);
     menu.style.setProperty("left", `${left}px`);
@@ -323,6 +344,8 @@ export function useDropdownOverlay(options) {
 
   const onClose = () => {
     detachListeners();
+    removeMenuMarker();
+    if (appendToBody) removePortalMarkerOnce();
   };
 
   // `flush: 'post'` runs the handler AFTER all other watchers in the same

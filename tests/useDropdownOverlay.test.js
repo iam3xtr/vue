@@ -278,8 +278,47 @@ describe("useDropdownOverlay", () => {
     // Simulate Buefy's updateAppendToBody wiping the classList (it removes
     // all classes and re-adds its own before applying the next position).
     refs.wrapperRef.value.classList.remove("tr-dropdown-overlay-portal");
-    await nextTick();
+    // The rAF loop re-installs the marker once per frame.
+    await flushFrame();
     expect(refs.wrapperRef.value.classList.contains("tr-dropdown-overlay-portal")).toBe(true);
+  });
+
+  it("removes the menu and portal markers on close", async () => {
+    ({ refs } = mountFresh({ appendToBody: true }));
+    setRect(refs.triggerRef.value, { top: 100, bottom: 130, height: 30 });
+    setRect(refs.menuRef.value, { height: 120 });
+    refs.activeRef.value = true;
+    await nextTick();
+    await flushMicro();
+    expect(refs.menuRef.value.classList.contains(DROPDOWN_OVERLAY_MARKER)).toBe(true);
+    expect(refs.wrapperRef.value.classList.contains("tr-dropdown-overlay-portal")).toBe(true);
+    refs.activeRef.value = false;
+    await nextTick();
+    expect(refs.menuRef.value.classList.contains(DROPDOWN_OVERLAY_MARKER)).toBe(false);
+    expect(refs.wrapperRef.value.classList.contains("tr-dropdown-overlay-portal")).toBe(false);
+  });
+
+  it("aligns the body-portal menu left edge with the trigger in is-*-right positions", async () => {
+    ({ refs } = mountFresh({ appendToBody: true }));
+    setRect(refs.triggerRef.value, { top: 100, bottom: 130, height: 30, left: 200, right: 300 });
+    setRect(refs.menuRef.value, { top: 130, height: 120, left: 200, width: 80, right: 280 });
+    refs.positionRef.value = "is-bottom-right";
+    refs.activeRef.value = true;
+    await nextTick();
+    await flushMicro();
+    expect(refs.menuRef.value.style.getPropertyValue("left")).toBe("200px");
+  });
+
+  it("shifts the body-portal menu left in is-*-left positions so the right edge stays anchored", async () => {
+    ({ refs } = mountFresh({ appendToBody: true }));
+    setRect(refs.triggerRef.value, { top: 100, bottom: 130, height: 30, left: 200, right: 300 });
+    setRect(refs.menuRef.value, { top: 130, height: 120, left: 120, width: 200, right: 320 });
+    refs.positionRef.value = "is-bottom-left";
+    refs.activeRef.value = true;
+    await nextTick();
+    await flushMicro();
+    // menuW (200) - triggerW (100) = 100; rect.left (200) - 100 = 100
+    expect(refs.menuRef.value.style.getPropertyValue("left")).toBe("100px");
   });
 
   it("keeps the lowered z-index when Buefy rewrites the menu style", async () => {

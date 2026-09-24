@@ -85,16 +85,24 @@ const refreshRefs = () => {
   const dropdownInstance = dropdownRef.value;
   if (!dropdownInstance) return;
   const rootEl = dropdownInstance.$el;
-  wrapperRef.value = rootEl?.classList?.contains("dropdown")
-    ? rootEl
-    : (rootEl?.querySelector?.(".dropdown") ?? rootEl);
   const trigger = rootEl?.querySelector?.(".dropdown-trigger");
   if (trigger) triggerRef.value = trigger;
   // Buefy's $refs.dropdownMenu points to the menu element Buefy itself
   // rendered; in portal mode this is the same node Buefy then moves into
   // the body wrapper, so the ref stays valid across the move.
-  menuRef.value = dropdownInstance.$refs?.dropdownMenu
-    ?? wrapperRef.value?.querySelector?.(".dropdown-menu")
+  const menu = dropdownInstance.$refs?.dropdownMenu
+    ?? rootEl?.querySelector?.(".dropdown-menu")
+    ?? null;
+  menuRef.value = menu;
+  // In portal mode the marker must land on the BODY-side `.dropdown`
+  // (the one Buefy creates via `createAbsoluteElement`), not on the
+  // original mount point. The body wrapper is the closest `.dropdown`
+  // ancestor of the moved menu. The original mount's `.dropdown` is
+  // reachable from `rootEl` and stays empty (Buefy moved the menu out);
+  // it does not carry the portal marker.
+  wrapperRef.value = menu?.closest?.(".dropdown")
+    ?? (rootEl?.classList?.contains("dropdown") ? rootEl : rootEl?.querySelector?.(".dropdown"))
+    ?? rootEl
     ?? null;
 };
 
