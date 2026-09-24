@@ -10,7 +10,7 @@
   >
     <template #trigger>
       <b-button
-        ref="triggerRef"
+        ref="triggerButtonRef"
         class="tr-model-select__trigger"
         :class="{ 'is-danger': invalid }"
         icon-right="chevron-down"
@@ -248,7 +248,12 @@ const modelId = defineModel({ type: String, default: null });
 const emit = defineEmits(["update:query"]);
 
 const dropdownRef = ref(null);
-const triggerRef = ref(null);
+// `triggerButtonRef` is the `<b-button>` component instance (template
+// ref, owned by Vue); `triggerElRef` is the `.dropdown-trigger` element
+// the overlay measures. They are kept separate so a re-render cannot swap
+// a component proxy into the overlay's element ref and vice versa.
+const triggerButtonRef = ref(null);
+const triggerElRef = ref(/** @type {HTMLElement|null} */ (null));
 const autocompleteRef = ref(null);
 const wrapperRef = ref(/** @type {HTMLElement|null} */ (null));
 const menuRef = ref(/** @type {HTMLElement|null} */ (null));
@@ -313,8 +318,12 @@ function searchInput() {
   return autocompleteRef.value?.$el?.querySelector("input");
 }
 
+function triggerButton() {
+  return triggerButtonRef.value?.$el ?? null;
+}
+
 function focusTrigger() {
-  triggerRef.value?.$el?.focus?.();
+  triggerButton()?.focus?.();
 }
 
 // The trigger's `@keydown.down` opens the dropdown through Buefy's own
@@ -323,7 +332,7 @@ function focusTrigger() {
 // the single source of truth for open/close state.
 function openPicker() {
   if (props.disabled || isActive.value) return;
-  const trigger = triggerRef.value?.$el;
+  const trigger = triggerButton();
   if (trigger && typeof trigger.click === "function") {
     searchQuery.value = "";
     emit("update:query", "");
@@ -334,14 +343,15 @@ function openPicker() {
 function onSelect(option) {
   if (!option || typeof option.id !== "string") return;
   modelId.value = option.id;
-  // Buefy will fire `active-change=false` after the user releases focus
-  // outside the menu; we don't close programmatically to preserve its
-  // own outside-click handler timing.
-  const trigger = triggerRef.value?.$el;
-  nextTick(() => {
-    trigger?.blur?.();
-    focusTrigger();
-  });
+  // Close explicitly — also when the current model is picked again and
+  // `modelId` does not change — through Buefy's own trigger toggle (a
+  // click on an open dropdown closes it synchronously), then return focus
+  // to the trigger. The pending focus-out check is dropped so it cannot
+  // toggle the dropdown a second time.
+  if (isActive.value) triggerButton()?.click?.();
+  clearTimeout(focusOutTimer);
+  focusOutTimer = null;
+  nextTick(focusTrigger);
 }
 
 function onFocusOut(event) {
@@ -355,8 +365,7 @@ function onFocusOut(event) {
     const popup = document.getElementById(popupId);
     const newFocus = event?.relatedTarget ?? document.activeElement;
     if (popup && popup.contains(newFocus)) return;
-    const trigger = triggerRef.value?.$el;
-    trigger?.dispatchEvent?.(new MouseEvent("click", { bubbles: true }));
+    triggerButton()?.dispatchEvent?.(new MouseEvent("click", { bubbles: true }));
   }, 0);
 }
 
@@ -372,7 +381,7 @@ function refreshRefs() {
   if (!dropdownInstance) return;
   const rootEl = dropdownInstance.$el;
   const trigger = rootEl?.querySelector?.(".dropdown-trigger");
-  if (trigger) triggerRef.value = trigger;
+  triggerElRef.value = trigger ?? null;
   const menu = dropdownInstance.$refs?.dropdownMenu
     ?? rootEl?.querySelector?.(".dropdown-menu")
     ?? null;
@@ -395,7 +404,7 @@ onMounted(() => {
 });
 
 useDropdownOverlay({
-  triggerRef,
+  triggerRef: triggerElRef,
   menuRef,
   wrapperRef,
   activeRef: isActive,

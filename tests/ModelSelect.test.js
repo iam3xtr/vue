@@ -259,6 +259,102 @@ describe("ModelSelect — open popup loading / empty / error states", () => {
   });
 });
 
+describe("ModelSelect — trigger / overlay lifecycle", () => {
+  // Buefy opens the dropdown from a `setTimeout` inside its toggle; close
+  // is synchronous. Settle timers and the component's own ticks.
+  async function settle() {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await nextTick();
+    await nextTick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  function triggerButton(wrapper) {
+    return wrapper.find("button.tr-model-select__trigger");
+  }
+
+  function isOpen(wrapper) {
+    return wrapper.classes().includes("tr-model-select--open");
+  }
+
+  async function openWithArrowDown(wrapper) {
+    await triggerButton(wrapper).trigger("keydown", { key: "ArrowDown" });
+    await settle();
+  }
+
+  function selectOption(wrapper, option) {
+    wrapper.findComponent({ name: "BAutocomplete" }).vm.$emit("select", option);
+  }
+
+  it("reopens with ArrowDown after the popup was opened and closed once", async () => {
+    const wrapper = mountModel({ models, recommendedModels: ["gpt"], modelValue: "gpt" });
+    await openWithArrowDown(wrapper);
+    expect(isOpen(wrapper)).toBe(true);
+
+    await triggerButton(wrapper).trigger("click");
+    await settle();
+    expect(isOpen(wrapper)).toBe(false);
+
+    await openWithArrowDown(wrapper);
+    expect(isOpen(wrapper)).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("closes the popup and focuses the trigger when the current model is selected again", async () => {
+    const wrapper = mountModel({ models, recommendedModels: ["gpt", "claude"], modelValue: "claude" });
+    await openWithArrowDown(wrapper);
+    expect(isOpen(wrapper)).toBe(true);
+
+    selectOption(wrapper, models[1]);
+    await settle();
+    expect(isOpen(wrapper)).toBe(false);
+    expect(document.activeElement).toBe(triggerButton(wrapper).element);
+    wrapper.unmount();
+  });
+
+  it("closes on a new selection and survives scroll/resize after a re-render while open", async () => {
+    const errors = [];
+    const onError = (event) => errors.push(event.error ?? event.message);
+    window.addEventListener("error", onError);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const wrapper = mountModel({ models, recommendedModels: ["gpt", "claude"], modelValue: "gpt" });
+      await openWithArrowDown(wrapper);
+      expect(isOpen(wrapper)).toBe(true);
+
+      // A consumer-driven re-render while open must not swap a component
+      // proxy into the element the overlay measures.
+      await wrapper.setProps({ invalid: true });
+      window.dispatchEvent(new Event("scroll"));
+      window.dispatchEvent(new Event("resize"));
+      await settle();
+
+      selectOption(wrapper, models[1]);
+      await settle();
+      expect(wrapper.emitted("update:modelValue")?.at(-1)).toEqual(["claude"]);
+      expect(isOpen(wrapper)).toBe(false);
+      expect(document.activeElement).toBe(triggerButton(wrapper).element);
+
+      window.dispatchEvent(new Event("scroll"));
+      window.dispatchEvent(new Event("resize"));
+      await settle();
+
+      await openWithArrowDown(wrapper);
+      expect(isOpen(wrapper)).toBe(true);
+      window.dispatchEvent(new Event("scroll"));
+      window.dispatchEvent(new Event("resize"));
+      await settle();
+
+      expect(errors).toEqual([]);
+      expect(consoleError).not.toHaveBeenCalled();
+      wrapper.unmount();
+    } finally {
+      window.removeEventListener("error", onError);
+      consoleError.mockRestore();
+    }
+  });
+});
+
 describe("ModelSelect — package boundary (no Vue Router / no Pinia)", () => {
   it("imports and renders without importing vue-router or pinia", async () => {
     const wrapper = mountModel({
