@@ -25,8 +25,13 @@
 //   - restores the menu's previous inline z-index on close, and leaves
 //     Buefy's mobile-modal presentation (fixed, centred, own z-index)
 //     untouched;
-//   - exports `resolveDropdownPlacement()` so callers choose inline vs.
-//     `append-to-body` from the clipping and modal/drawer context;
+//   - exports `resolveDropdownPlacement()` so callers choose inline,
+//     `append-to-body` or in-place `position: fixed` from the clipping and
+//     modal/drawer context;
+//   - in the in-place fixed mode (a clipped menu inside a modal/drawer)
+//     keeps the menu in its DOM and stacking context but pins it with
+//     viewport coordinates so the scroll body cannot clip it; the inline
+//     `position`/`top`/`left`/`right`/`bottom` values are restored on close;
 //   - keeps its own scroll/resize listeners (capture phase, so they fire
 //     before Buefy's) and removes them on close/unmount together with any
 //     pending rAF callback;
@@ -112,9 +117,13 @@ const spaceAbove = (rect) => rect.top;
 
 // Ancestors that own their own stacking context above the page (`b-modal`,
 // `b-sidebar`, another open dropdown menu, any ARIA dialog). A menu opened
-// inside one of them stays inline so it keeps that stacking context: a
-// body portal at the `--tr-z-dropdown` token would render underneath the
-// modal/drawer, and Buefy's raw `99` would render above it.
+// inside one of them never moves to a body portal: a portal at the
+// `--tr-z-dropdown` token would render underneath the modal/drawer, Buefy's
+// raw `99` would render above it, and a click inside a portal counts as an
+// outside click for `b-sidebar`. When an ancestor clips overflow there
+// (`.modal-card-body`, a drawer's scroll body) the menu stays in place and
+// is pinned with `position: fixed` instead, which escapes overflow clipping
+// while keeping the host's DOM, stacking context and focus handling.
 const OVERLAY_CONTEXT_SELECTOR = ".modal, .sidebar-content, .dropdown-menu, [role='dialog']";
 const CLIPPING_OVERFLOW = /\b(hidden|clip|auto|scroll)\b/;
 const CLIPPING_CONTAIN = /\b(paint|strict|content)\b/;
@@ -122,11 +131,14 @@ const CLIPPING_CONTAIN = /\b(paint|strict|content)\b/;
 /**
  * Chooses how a `b-dropdown` anchored at `anchor` should render its menu.
  *
- * - `"inline"` when the anchor sits inside a modal/drawer/dropdown/dialog
- *   (keeps the menu in that stacking context) or when no ancestor clips
- *   overflow;
- * - `"portal"` when an ancestor between the anchor and `<body>` clips
- *   overflow (`overflow` other than `visible`, or `contain: paint`), so
+ * - `"inline"` when no ancestor clips overflow (`overflow` other than
+ *   `visible`, or `contain: paint`);
+ * - `"fixed"` when the anchor sits inside a modal/drawer/dropdown/dialog
+ *   and an ancestor up to and including that host clips overflow: the
+ *   caller keeps `b-dropdown` inline and passes `fixed` to
+ *   `useDropdownOverlay`, which pins the menu with viewport coordinates
+ *   inside the host's stacking context;
+ * - `"portal"` when an ancestor outside any such host clips overflow, so
  *   the caller should render `b-dropdown` with `append-to-body`.
  *
  * Returns `"inline"` without a DOM (SSR) or without an anchor. Buefy only
@@ -134,7 +146,7 @@ const CLIPPING_CONTAIN = /\b(paint|strict|content)\b/;
  * the anchor is in the document and remount `b-dropdown` when it changes.
  *
  * @param {Element|null|undefined} anchor — the `b-dropdown` root element.
- * @returns {"inline"|"portal"}
+ * @returns {"inline"|"fixed"|"portal"}
  */
 export function resolveDropdownPlacement(anchor) {
   if (!anchor || typeof document === "undefined") return "inline";
@@ -145,7 +157,6 @@ export function resolveDropdownPlacement(anchor) {
     el && el !== document.body && el !== document.documentElement;
     el = el.parentElement
   ) {
-    if (el.matches?.(OVERLAY_CONTEXT_SELECTOR)) return "inline";
     if (!clipped && gcs) {
       const style = gcs(el);
       const overflow = `${style.overflow} ${style.overflowX} ${style.overflowY}`;
@@ -153,6 +164,7 @@ export function resolveDropdownPlacement(anchor) {
         clipped = true;
       }
     }
+    if (el.matches?.(OVERLAY_CONTEXT_SELECTOR)) return clipped ? "fixed" : "inline";
   }
   return clipped ? "portal" : "inline";
 }
@@ -176,6 +188,7 @@ const isMobileModalPresentation = (menu) => {
  * @property {import("vue").Ref<boolean>} activeRef — mirror of Buefy's `active-change` event. The composable reacts to its changes; the caller wires the event into the ref.
  * @property {import("vue").Ref<string>} positionRef — two-way binding to Buefy's `position` prop. Caller seeds it; composable writes the flipped value back so Buefy reactively re-renders the wrapper class.
  * @property {boolean|import("vue").Ref<boolean>|(() => boolean)} [appendToBody] — when true the composable also rewrites `top`/`left` (Buefy only writes them once on open) and lowers z-index via `!important` to the token scale (`--tr-z-dropdown`, below modal/drawer), so the portal cannot float above them; the menu's previous inline z-index is restored on close. Read on every open, so a caller can bind it to `resolveDropdownPlacement()`.
+ * @property {boolean|import("vue").Ref<boolean>|(() => boolean)} [fixed] — inline mode only (ignored with `appendToBody`): when true the composable pins the menu in place with `position: fixed` and viewport `top`/`left` derived from the trigger, recomputed on scroll/resize, so a clipping scroll body of a modal/drawer cannot cut it off; the menu's previous inline positioning is restored on close. Read on every open, so a caller can bind it to `resolveDropdownPlacement() === "fixed"`.
  * @property {number} [edgeGap] — minimum free space to keep before flipping (px). Default 8.
  * @property {import("vue").Ref<HTMLElement|null>} [portalRef] — for body-portal mode: the outer body wrapper Buefy creates (`<div style="position:absolute">`). The composable can use it to find the menu by walking up from the portal wrapper when `menuRef` is not yet populated. Optional: when omitted, the composable relies on `menuRef` alone.
  */
@@ -196,6 +209,7 @@ export function useDropdownOverlay(options) {
     activeRef,
     positionRef,
     appendToBody = false,
+    fixed = false,
     edgeGap = VIEWPORT_EDGE_GAP,
     portalRef,
   } = options;
@@ -204,6 +218,9 @@ export function useDropdownOverlay(options) {
   // (Buefy's literal `"99"` from `updateAppendToBody`), restored on close.
   // `null` while nothing has been overridden.
   let savedZIndex = null;
+  // The menu's inline positioning before the fixed mode took it over,
+  // restored on close. `null` while the fixed mode is not applied.
+  let savedFixedStyle = null;
   let detachFns = [];
   let cancelFrame = null;
   let listenersAttached = false;
@@ -276,6 +293,20 @@ export function useDropdownOverlay(options) {
     }
   };
 
+  // Buefy's mobile-modal CSS forces `position: fixed !important`. While
+  // the in-place fixed mode owns an inline `position: fixed`, the computed
+  // value alone cannot tell the two apart, so the owned inline value is
+  // lifted for the read and put back unchanged.
+  const isMobileModal = (menu) => {
+    if (!savedFixedStyle || !menu) return isMobileModalPresentation(menu);
+    const value = menu.style.getPropertyValue("position");
+    const priority = menu.style.getPropertyPriority("position");
+    menu.style.removeProperty("position");
+    const result = isMobileModalPresentation(menu);
+    if (value) menu.style.setProperty("position", value, priority);
+    return result;
+  };
+
   // Apply token-scaled z-index with `!important` so Buefy's later
   // `style.setProperty('z-index', '99')` calls in `updateAppendToBody`
   // (re-fired on every `isActive` change) cannot re-override us. The third
@@ -284,7 +315,7 @@ export function useDropdownOverlay(options) {
   const applyZIndex = () => {
     const menu = menuRef.value;
     if (!menu) return;
-    if (isMobileModalPresentation(menu)) {
+    if (isMobileModal(menu)) {
       restoreZIndex();
       return;
     }
@@ -314,6 +345,77 @@ export function useDropdownOverlay(options) {
     savedZIndex = null;
   };
 
+  const FIXED_PROPS = ["position", "top", "left", "right", "bottom", "width"];
+
+  const restoreFixed = () => {
+    const menu = menuRef.value;
+    if (!menu || savedFixedStyle === null) return;
+    for (const prop of FIXED_PROPS) {
+      const saved = savedFixedStyle[prop];
+      if (saved.value) {
+        menu.style.setProperty(prop, saved.value, saved.priority);
+      } else {
+        menu.style.removeProperty(prop);
+      }
+    }
+    savedFixedStyle = null;
+  };
+
+  // Viewport-relative menu origin for the current position, matching
+  // Buefy's own `updateAppendToBody` formula (see `applyPortalCoords`).
+  const menuOrigin = (menu, trigger) => {
+    const rect = trigger.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    const menuH = menuRect.height || 0;
+    const menuW = menuRect.width || 0;
+    const triggerH = trigger.offsetHeight || 0;
+    const triggerW = trigger.offsetWidth || 0;
+    const position = positionRef.value;
+    let top = rect.top;
+    let left = rect.left;
+    if (isBottom(position)) {
+      top += triggerH;
+    } else {
+      top -= menuH;
+    }
+    if (position.endsWith("-left")) {
+      left -= menuW - triggerW;
+    }
+    return { top, left };
+  };
+
+  // In-place fixed mode: `position: fixed` escapes the overflow clipping
+  // of the modal/drawer scroll body while the menu stays in the host's DOM
+  // and stacking context. `right`/`bottom` are reset so Bulma/Buefy
+  // `is-*-left` / `is-top-*` offsets do not stretch the fixed box. An
+  // `expanded` dropdown's `width: 100%` would resolve against the viewport
+  // once fixed, so it is pinned to the dropdown root's width, as Buefy
+  // does for its own `append-to-body` + `expanded` menu.
+  const applyFixedCoords = () => {
+    const menu = menuRef.value;
+    const trigger = triggerRef.value;
+    if (!menu || !trigger) return;
+    if (savedFixedStyle === null) {
+      savedFixedStyle = {};
+      for (const prop of FIXED_PROPS) {
+        savedFixedStyle[prop] = {
+          value: menu.style.getPropertyValue(prop),
+          priority: menu.style.getPropertyPriority(prop),
+        };
+      }
+    }
+    menu.style.setProperty("position", "fixed");
+    menu.style.setProperty("right", "auto");
+    menu.style.setProperty("bottom", "auto");
+    const root = menu.parentElement;
+    if (root?.classList?.contains("is-expanded") && root.offsetWidth) {
+      menu.style.setProperty("width", `${root.offsetWidth}px`);
+    }
+    const { top, left } = menuOrigin(menu, trigger);
+    menu.style.setProperty("top", `${top}px`);
+    menu.style.setProperty("left", `${left}px`);
+  };
+
   // Recompute inline `top`/`left` for body-portal mode. Buefy's
   // `updateAppendToBody` only writes these once per open and does not track
   // scroll/resize, so we re-derive from the trigger's bounding rect every
@@ -327,24 +429,11 @@ export function useDropdownOverlay(options) {
     const menu = menuRef.value;
     const trigger = triggerRef.value;
     if (!menu || !trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    const menuH = menu.getBoundingClientRect().height || 0;
-    const menuW = menu.getBoundingClientRect().width || 0;
-    const triggerH = trigger.offsetHeight || 0;
-    const triggerW = trigger.offsetWidth || 0;
-    const position = positionRef.value;
     const scrollX = typeof window !== "undefined" ? window.scrollX : 0;
     const scrollY = typeof window !== "undefined" ? window.scrollY : 0;
-    let top = rect.top + scrollY;
-    let left = rect.left + scrollX;
-    if (isBottom(position)) {
-      top += triggerH;
-    } else {
-      top -= menuH;
-    }
-    if (position.endsWith("-left")) {
-      left -= menuW - triggerW;
-    }
+    const origin = menuOrigin(menu, trigger);
+    const top = origin.top + scrollY;
+    const left = origin.left + scrollX;
     menu.style.setProperty("top", `${top}px`);
     menu.style.setProperty("left", `${left}px`);
   };
@@ -364,13 +453,17 @@ export function useDropdownOverlay(options) {
 
     applyMenuMarker();
     const portal = !!toValue(appendToBody);
+    const pinned = !portal && !!toValue(fixed);
     if (portal) {
       applyPortalMarker();
       applyZIndex();
     }
     // Buefy's mobile-modal presentation centres the fixed menu itself;
     // flipping or rewriting coordinates there would fight its CSS.
-    if (isMobileModalPresentation(menu)) return;
+    if (isMobileModal(menu)) {
+      restoreFixed();
+      return;
+    }
 
     const position = positionRef.value;
     const m = measure();
@@ -380,6 +473,7 @@ export function useDropdownOverlay(options) {
     }
 
     if (portal) applyPortalCoords();
+    else if (pinned) applyFixedCoords();
   };
 
   const apply = async () => {
@@ -452,6 +546,7 @@ export function useDropdownOverlay(options) {
     detachListeners();
     removeMenuMarker();
     restoreZIndex();
+    restoreFixed();
     removePortalMarkerOnce();
   };
 

@@ -70,8 +70,9 @@ import {
  * through a local ref; Buefy reactively re-renders the wrapper class on
  * every flip. The menu renders inline unless an ancestor clips overflow,
  * in which case it moves to a body portal (`append-to-body`); inside a
- * modal, drawer or another dropdown menu it always stays inline to keep
- * that stacking context (see `resolveDropdownPlacement`).
+ * modal, drawer or another dropdown menu it never moves to a portal and
+ * keeps that stacking context, pinned in place with `position: fixed`
+ * when that host clips overflow (see `resolveDropdownPlacement`).
  *
  * Requires Buefy (`b-dropdown`, `b-dropdown-item`, `b-icon`).
  */
@@ -149,10 +150,12 @@ const positionRef = ref(/** @type {(typeof POSITIONS)[number]} */ ("is-bottom-le
 // Buefy creates its body wrapper only in `mounted()`, so the placement is
 // resolved once the inline root is in the document; switching it remounts
 // `b-dropdown` through its `key`.
-const appendToBody = ref(false);
+const placement = ref(/** @type {"inline"|"fixed"|"portal"} */ ("inline"));
+const appendToBody = computed(() => placement.value === "portal");
+const pinnedInPlace = computed(() => placement.value === "fixed");
 onMounted(() => {
   const rootEl = dropdownRef.value?.$el ?? null;
-  appendToBody.value = resolveDropdownPlacement(rootEl) === "portal";
+  placement.value = resolveDropdownPlacement(rootEl);
 });
 
 useDropdownOverlay({
@@ -162,6 +165,7 @@ useDropdownOverlay({
   activeRef: isActive,
   positionRef,
   appendToBody,
+  fixed: pinnedInPlace,
 });
 
 const onActiveChange = async (next) => {

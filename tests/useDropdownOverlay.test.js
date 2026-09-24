@@ -45,7 +45,7 @@ const flushFrame = () => new Promise((r) => requestAnimationFrame(() => r(undefi
 // shape we depend on) and routes the four element refs to a fresh
 // composition tree. The harness itself owns the refs so tests can
 // override rects and assert on the resulting position class.
-function makeHarness({ appendToBody = false } = {}) {
+function makeHarness({ appendToBody = false, fixed = false } = {}) {
   const refs = {
     wrapperRef: ref(null),
     triggerRef: ref(null),
@@ -63,6 +63,7 @@ function makeHarness({ appendToBody = false } = {}) {
         activeRef: refs.activeRef,
         positionRef: refs.positionRef,
         appendToBody,
+        fixed,
       });
       return () =>
         h("div", { ref: refs.wrapperRef, class: "dropdown" }, [
@@ -340,6 +341,92 @@ describe("useDropdownOverlay", () => {
     expect(refs.menuRef.value.style.getPropertyValue("z-index")).toBe("35");
   });
 
+  describe("in-place fixed mode", () => {
+    const openFixed = async ({ appendToBody = false } = {}) => {
+      ({ Harness, refs } = makeHarness({ appendToBody, fixed: true }));
+      wrapper = mount(Harness, { attachTo: document.body });
+      setRect(refs.triggerRef.value, { top: 300, left: 100, bottom: 330, height: 30, width: 120 });
+      setRect(refs.menuRef.value, { height: 200, width: 180 });
+      refs.activeRef.value = true;
+      await nextTick();
+      await flushMicro();
+      return refs;
+    };
+
+    it("pins the inline menu with viewport coordinates below the trigger", async () => {
+      await openFixed();
+      const menu = refs.menuRef.value;
+      expect(menu.closest(".dropdown")).toBe(refs.wrapperRef.value);
+      expect(menu.style.getPropertyValue("position")).toBe("fixed");
+      expect(menu.style.getPropertyValue("top")).toBe("330px");
+      // is-bottom-left keeps the menu's right edge on the trigger's right edge.
+      expect(menu.style.getPropertyValue("left")).toBe("40px");
+      expect(menu.style.getPropertyValue("right")).toBe("auto");
+      expect(menu.style.getPropertyValue("bottom")).toBe("auto");
+      // Stays in the host's stacking context: no portal marker, no z-index override.
+      expect(refs.wrapperRef.value.classList.contains("tr-dropdown-overlay-portal")).toBe(false);
+      expect(menu.style.getPropertyValue("z-index")).toBe("");
+    });
+
+    it("flips upward and follows the trigger on a container scroll", async () => {
+      await openFixed();
+      setRect(refs.triggerRef.value, { top: 720, left: 100, bottom: 750, height: 30, width: 120 });
+      document.body.dispatchEvent(new Event("scroll"));
+      await flushFrame();
+      await flushFrame();
+      expect(refs.positionRef.value).toBe("is-top-left");
+      expect(refs.menuRef.value.style.getPropertyValue("top")).toBe("520px");
+    });
+
+    it("keeps updating coordinates while its own inline position is fixed", async () => {
+      await openFixed();
+      setRect(refs.triggerRef.value, { top: 200, left: 100, bottom: 230, height: 30, width: 120 });
+      window.dispatchEvent(new Event("resize"));
+      await flushFrame();
+      await flushFrame();
+      expect(refs.menuRef.value.style.getPropertyValue("top")).toBe("230px");
+    });
+
+    it("pins an expanded menu to the dropdown root width", async () => {
+      ({ Harness, refs } = makeHarness({ fixed: true }));
+      wrapper = mount(Harness, { attachTo: document.body });
+      refs.wrapperRef.value.classList.add("is-expanded");
+      setRect(refs.wrapperRef.value, { width: 240 });
+      setRect(refs.triggerRef.value, { top: 300, bottom: 330, height: 30, width: 240 });
+      setRect(refs.menuRef.value, { height: 200, width: 240 });
+      refs.activeRef.value = true;
+      await nextTick();
+      await flushMicro();
+      expect(refs.menuRef.value.style.getPropertyValue("width")).toBe("240px");
+    });
+
+    it("restores the previous inline positioning on close", async () => {
+      ({ Harness, refs } = makeHarness({ fixed: true }));
+      wrapper = mount(Harness, { attachTo: document.body });
+      refs.menuRef.value.style.setProperty("top", "4px");
+      setRect(refs.triggerRef.value, { top: 300, bottom: 330, height: 30 });
+      setRect(refs.menuRef.value, { height: 200 });
+      refs.activeRef.value = true;
+      await nextTick();
+      await flushMicro();
+      expect(refs.menuRef.value.style.getPropertyValue("position")).toBe("fixed");
+      refs.activeRef.value = false;
+      await nextTick();
+      const style = refs.menuRef.value.style;
+      expect(style.getPropertyValue("position")).toBe("");
+      expect(style.getPropertyValue("top")).toBe("4px");
+      expect(style.getPropertyValue("left")).toBe("");
+      expect(style.getPropertyValue("right")).toBe("");
+      expect(style.getPropertyValue("bottom")).toBe("");
+    });
+
+    it("is ignored in append-to-body mode", async () => {
+      await openFixed({ appendToBody: true });
+      expect(refs.menuRef.value.style.getPropertyValue("position")).toBe("");
+      expect(refs.menuRef.value.style.getPropertyValue("top")).toBe("330px");
+    });
+  });
+
   it("leaves Buefy's fixed mobile-modal menu alone (no flip, no z-index override)", async () => {
     ({ refs } = mountFresh({ appendToBody: true }));
     setRect(refs.triggerRef.value, { top: 720, bottom: 750, height: 30 });
@@ -391,14 +478,32 @@ describe("resolveDropdownPlacement", () => {
     },
   );
 
+  const hostAttr = (selector) => (selector.startsWith("[")
+    ? 'role="dialog"'
+    : `class="${selector.slice(1)}"`);
+
   it.each([".modal", ".sidebar-content", ".dropdown-menu", "[role='dialog']"])(
-    "keeps the menu inline inside a %s stacking context even when clipped",
+    "pins the menu in place (no portal) inside a clipping %s stacking context",
     (selector) => {
-      const attr = selector.startsWith("[")
-        ? 'role="dialog"'
-        : `class="${selector.slice(1)}"`;
       const anchor = anchorIn(
-        `<div ${attr}><div style="overflow: auto"><div class="anchor"></div></div></div>`,
+        `<div ${hostAttr(selector)}><div style="overflow: auto"><div class="anchor"></div></div></div>`,
+      );
+      expect(resolveDropdownPlacement(anchor)).toBe("fixed");
+    },
+  );
+
+  it("pins the menu in place when the modal/drawer host itself clips", () => {
+    const anchor = anchorIn(
+      '<div class="sidebar-content" style="overflow-y: auto"><div><div class="anchor"></div></div></div>',
+    );
+    expect(resolveDropdownPlacement(anchor)).toBe("fixed");
+  });
+
+  it.each([".modal", ".sidebar-content", ".dropdown-menu", "[role='dialog']"])(
+    "keeps the menu inline inside an unclipped %s stacking context",
+    (selector) => {
+      const anchor = anchorIn(
+        `<div style="overflow: hidden"><div ${hostAttr(selector)}><div><div class="anchor"></div></div></div></div>`,
       );
       expect(resolveDropdownPlacement(anchor)).toBe("inline");
     },

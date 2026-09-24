@@ -155,6 +155,39 @@ describe.each([
     }
   });
 
+  it.each([
+    [
+      "modal card body",
+      '<div class="modal"><div class="modal-card"><section class="modal-card-body" style="overflow: auto"><div class="mount"></div></section></div></div>',
+    ],
+    [
+      "form drawer body",
+      '<div class="sidebar-content" style="overflow-y: auto"><div class="tr-form-drawer__body" style="overflow-y: auto"><div class="mount"></div></div></div>',
+    ],
+  ])("pins the open menu in place inside a clipping %s", async (_host, hostHtml) => {
+    const { wrapper, menu, cleanup } = await mountIn(hostHtml);
+    const settle = async () => {
+      await nextTick();
+      await nextTick();
+      await new Promise((r) => setTimeout(r, 0));
+      await nextTick();
+      await nextTick();
+    };
+    try {
+      await wrapper.find(".dropdown-trigger").trigger("click");
+      await settle();
+      expect(menu.closest(".mount")).not.toBeNull();
+      expect(menu.style.getPropertyValue("position")).toBe("fixed");
+      expect(menu.style.getPropertyValue("top")).toMatch(/px$/);
+      await wrapper.find(".dropdown-trigger").trigger("click");
+      await settle();
+      expect(menu.style.getPropertyValue("position")).toBe("");
+      expect(menu.style.getPropertyValue("top")).toBe("");
+    } finally {
+      cleanup();
+    }
+  });
+
   it("removes the Buefy body portal on unmount", async () => {
     const { cleanup } = await mountIn(
       '<div style="overflow: hidden"><div class="mount"></div></div>',

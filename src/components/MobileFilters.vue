@@ -27,7 +27,7 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref, useTemplateRef } from "vue";
+import { computed, nextTick, onMounted, ref, useTemplateRef } from "vue";
 
 import {
   POSITIONS,
@@ -51,12 +51,13 @@ import {
  * Placement follows `resolveDropdownPlacement`: the panel stays inline
  * unless an ancestor clips overflow, in which case it moves to a body
  * portal (`append-to-body`) so the nested filters are not cut off; inside
- * a modal, drawer or another dropdown menu it always stays inline to keep
- * that stacking context. For the portal, the overlay composable installs
- * the `tr-dropdown-overlay-portal` marker on the body wrapper Buefy
- * creates and lowers Buefy's `z-index: 99` to the `@iam3xtr/ui`
- * `--tr-z-dropdown` token via `!important`, so the menu cannot float
- * above `b-modal` / `b-sidebar`. Buefy's mobile-modal presentation is
+ * a modal, drawer or another dropdown menu it never moves to a portal and
+ * keeps that stacking context — when such a host clips overflow the panel
+ * is pinned in place with `position: fixed` instead. For the portal, the
+ * overlay composable installs the `tr-dropdown-overlay-portal` marker on
+ * the body wrapper Buefy creates and lowers Buefy's `z-index: 99` to the
+ * `@iam3xtr/ui` `--tr-z-dropdown` token via `!important`, so the menu
+ * cannot float above `b-modal` / `b-sidebar`. Buefy's mobile-modal presentation is
  * left to Buefy (no flip, coordinates or z-index override).
  *
  * Requires Buefy (`b-dropdown`, `b-button`).
@@ -119,10 +120,12 @@ const positionRef = ref(/** @type {(typeof POSITIONS)[number]} */ ("is-bottom-le
 // Buefy creates its body wrapper only in `mounted()`, so the placement is
 // resolved once the inline root is in the document; switching it remounts
 // `b-dropdown` through its `key`.
-const appendToBody = ref(false);
+const placement = ref(/** @type {"inline"|"fixed"|"portal"} */ ("inline"));
+const appendToBody = computed(() => placement.value === "portal");
+const pinnedInPlace = computed(() => placement.value === "fixed");
 onMounted(() => {
   const rootEl = dropdownRef.value?.$el ?? null;
-  appendToBody.value = resolveDropdownPlacement(rootEl) === "portal";
+  placement.value = resolveDropdownPlacement(rootEl);
 });
 
 useDropdownOverlay({
@@ -132,6 +135,7 @@ useDropdownOverlay({
   activeRef: isActive,
   positionRef,
   appendToBody,
+  fixed: pinnedInPlace,
 });
 
 const onActiveChange = async (next) => {
