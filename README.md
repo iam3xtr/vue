@@ -142,7 +142,7 @@ default-реестр без этого шага (см. "Реестр иконо�
 | `NavbarMenu` | — (читает injection `navbarMenuKey`) | — | default | — |
 | `FileDropTarget` | `disabled`, `multiple` (по умолчанию `true`), `accept` (расширения/MIME/`image/*`, только клиентская подсказка), `overlayLabel` (по умолчанию `"Отпустите файлы, чтобы загрузить"`) | `files` (`File[]`, только на реальном drop файлов) | default | — |
 | `FormDrawer` | `v-model` (обязателен, open state), `title`, `busy`, `disabled`, `closeAriaLabel` (по умолчанию `"Закрыть"`) | `update:modelValue`, `submit` (не эмитится во время `busy`/`disabled`) | default (form body, scoped `{ busy, disabled }`), `footer` (actions, тот же scope) | Buefy (`b-sidebar`, `b-icon`) |
-| `ModelSelect` | `mode` (этап 2.1 — фиксированно `"model"`), `models` (обязателен, `[{id,name,provider?}]`), `recommendedModels`, `searchResults`, `loading`, `error`, `invalid`, `disabled`, `inputId`, `triggerPlaceholder`, `searchPlaceholder`, `triggerAriaLabel`, `searchAriaLabel`, `triggerTitle`, `emptyLabel`, `loadingLabel`, `errorLabel`; `v-model:modelId` (канонический выбор) | `update:modelId`, `update:query` | — | Buefy (`b-dropdown`, `b-button`, `b-autocomplete`) |
+| `ModelSelect` | `mode` (`"model"` / `"byok"` / `"both"`), `models` (обязателен, `[{id,name,provider?}]`), `recommendedModels`, `searchResults`, `loading`, `error`, `invalid`, `disabled`, `inputId`, `triggerPlaceholder`, `searchPlaceholder`, `triggerAriaLabel`, `searchAriaLabel`, `triggerTitle`, `emptyLabel`, `loadingLabel`, `errorLabel`, `switchLabel` / `switchAriaLabel` (только `mode === "both"`), `freeformActionLabel` / `freeformActionAriaLabel` / `freeformHint` / `freeformErrorLabel` (BYOK scope); `v-model:modelId`, `v-model:byokModelId`, `v-model:providerModelId`, `v-model:useOwnApiKey` (только `mode === "both"`) | `update:modelId`, `update:byokModelId`, `update:providerModelId`, `update:useOwnApiKey`, `update:query` | `byok-key` (consumer-owned UI ключа; пакет не читает и не хранит значение) | Buefy (`b-dropdown`, `b-button`, `b-autocomplete`) |
 
 `ToolbarDropdown` и `MobileFilters` используют общий overlay: открытое меню
 перекрывает следующий контент и меняет направление у края viewport. Если
@@ -210,12 +210,13 @@ details), не для форм. `b-modal` — короткая форма без
 выделенного fixed footer. `b-dialog` — только подтверждение действия, не
 форма любой длины. `FormDrawer` не заменяет ни один из этих трёх.
 
-### `ModelSelect`: режим `model`
+### `ModelSelect`: режимы `model`, `byok`, `both`
 
-`ModelSelect` — выбор модели из каталога. Сейчас поддерживается только
-`mode="model"`; режимы `byok` и `both` ещё не реализованы (для другого
-значения `mode` Vue выводит dev-предупреждение validator), не полагайтесь
-на них.
+`ModelSelect` — публичный выбор модели с тремя фиксированными режимами.
+В одном компоненте объединены каталожный режим (`mode === "model"`),
+BYOK-каталог + свободный BYOK identifier (`mode === "byok"`) и
+переключаемый режим с видимым switch ( `mode === "both"`). Для других
+значений `mode` Vue выводит dev-предупреждение validator.
 
 Данные полностью готовит consumer, компонент сам не фильтрует каталог и не
 делает запросов:
@@ -226,35 +227,54 @@ details), не для форм. `b-modal` — короткая форма без
 - `recommendedModels` — массив `id` из `models`; показывается, пока query
   пуст или состоит из пробелов. Неизвестные `id` пропускаются.
 - `searchResults` — полные записи модели; показываются только при непустом
-  query. `update:query` эмитится только при реальном изменении query
-  (ввод; `""` после выбора модели или при повторном открытии после
-  брошенного поиска), без имени выбранной модели — по нему consumer
-  фильтрует локально или запрашивает API.
-- `v-model:model-id` — канонический выбор (`id` строкой или `null`).
-  Закрытый trigger показывает `name` модели с этим `id` из `models`,
-  независимо от transient query; если `id` в `models` нет, показывается
-  `triggerPlaceholder`. Открытие очищает query и переводит focus на поиск,
-  закрытие без выбора сохраняет `modelId`. Выбранная модель в списке
-  определяется по `id` и помечается видимым «✓» и `aria-current="true"`.
-- `loading`/`error` — состояние запроса consumer. Когда видимый список
+  query. `update:query` эмитится только при реальном изменении query.
+- `v-model:model-id` — канонический выбор обычной модели (`id` строкой
+  или `null`). Активна в режимах `model` и при `useOwnApiKey === false`
+  в `both`.
+- `v-model:byok-model-id` — канонический BYOK-каталог id. Активна в
+  режимах `byok` и при `useOwnApiKey === true` в `both`.
+- `v-model:provider-model-id` — свободный BYOK id (например,
+  `openai/gpt-4o-mini`). Взаимоисключающее с `byok-model-id`: выбор
+  catalog BYOK id очищает free-form id, commit free-form id очищает
+  catalog BYOK id. Обычный `model-id` при этом не затрагивается.
+- `v-model:use-own-api-key` — есть смысл только в `mode === "both"`,
+  полностью контролируется consumer. В одиночных режимах switch не
+  отображается, а scope фиксирован (`model` / `byok` соответственно).
+  Само переключение никогда не стирает `model-id` / `byok-model-id` /
+  `provider-model-id` — это скрытое состояние consumer.
+- Trigger показывает имя по активной `v-model` связи. В BYOK-scope
+  `providerModelId` всегда выигрывает у `byokModelId` на закрытом
+  trigger (это последний commit пользователя); каталожная отметка
+  внутри popup относится только к активному id.
+- Free-form действие (`freeformActionLabel` / `freeformActionAriaLabel`)
+  появляется, только если: scope === BYOK; query непуст после trim;
+  consumer не вернул результатов; `loading === false` и `error === false`.
+  Trimmed id без пробелов и длиной ≤ 255 символов; некорректный ввод
+  блокирует кнопку и подсвечивается `freeformErrorLabel`.
+- `loading` / `error` — состояние запроса consumer. Когда видимый список
   пуст, popup показывает ровно одно сообщение с приоритетом
   error > loading > empty: `errorLabel` (`role="alert"`), `loadingLabel`
   (`role="status"`, `aria-busy="true"`) или `emptyLabel`
-  (`role="status"`).
+  (`role="status"`). Free-form действие при `loading === true` или
+  `error === true` не становится candidate.
 - `invalid` — ошибка валидации на закрытом trigger (`is-danger` +
   `aria-invalid="true"`); `inputId` становится `id` trigger-кнопки, чтобы
   внешний `<label for>` или сводка ошибок формы ссылались на неё.
   `disabled` блокирует открытие.
+- Слот `byok-key` — consumer-owned UI ключа в BYOK scope. Пакет не
+  читает и не хранит его значение, не обращается к API, не реализует
+  permission policy. Ключ и его lifecycle остаются за consumer.
 
 Компонент i18n-нейтрален: все видимые тексты и accessible names
 (`triggerPlaceholder`, `searchPlaceholder`, `triggerAriaLabel`,
 `searchAriaLabel`, `triggerTitle`, `emptyLabel`, `loadingLabel`,
-`errorLabel`) по умолчанию пустые и передаются consumer. Popup — один
-внешний `b-dropdown` на общем overlay (`useDropdownOverlay`, см. выше):
-search row и результаты остаются в одном popup, внутренний
-`b-autocomplete` не создаёт второй body-portal и не выбирает своё
-направление; Buefy сохраняет keyboard/focus/close и layering в
-modal/drawer.
+`errorLabel`, `switchLabel`, `switchAriaLabel`, `freeformActionLabel`,
+`freeformActionAriaLabel`, `freeformHint`, `freeformErrorLabel`) по
+умолчанию пустые и передаются consumer. Popup — один внешний
+`b-dropdown` на общем overlay (`useDropdownOverlay`, см. выше): search
+row и результаты остаются в одном popup, внутренний `b-autocomplete`
+не создаёт второй body-portal и не выбирает своё направление; Buefy
+сохраняет keyboard/focus/close и layering в modal/drawer.
 
 #### Адаптация production-формы
 

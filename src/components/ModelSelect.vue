@@ -3,7 +3,10 @@
     ref="dropdownRef"
     :key="appendToBody ? 'portal' : 'inline'"
     class="tr-model-select"
-    :class="{ 'tr-model-select--open': isOpen }"
+    :class="[
+      `tr-model-select--mode-${mode}`,
+      { 'tr-model-select--open': isOpen, 'is-danger': invalid },
+    ]"
     :position="positionRef"
     :append-to-body="appendToBody"
     @active-change="onActiveChange"
@@ -40,6 +43,34 @@
         class="tr-model-select__popup"
         @focusout="onFocusOut"
       >
+        <!--
+          `mode === "both"` adds a controlled switch above the search
+          row. The switch's value is the consumer's `v-model:useOwnApiKey`;
+          flipping it never erases hidden `modelId`/`byokModelId`/
+          `providerModelId` — that contract is owned by the consumer.
+        -->
+        <div
+          v-if="mode === 'both'"
+          class="tr-model-select__switch-row"
+        >
+          <label
+            class="tr-model-select__switch"
+            :class="{ 'is-active': useOwnApiKeyValue }"
+          >
+            <input
+              type="checkbox"
+              class="tr-model-select__switch-input"
+              :checked="useOwnApiKeyValue"
+              :disabled="disabled"
+              :aria-label="switchAriaLabel || undefined"
+              @change="onSwitchChange"
+            >
+            <span class="tr-model-select__switch-label">
+              {{ switchLabel }}
+            </span>
+          </label>
+        </div>
+
         <b-autocomplete
           ref="autocompleteRef"
           v-model="searchQuery"
@@ -50,7 +81,7 @@
           dropdown-position="bottom"
           :placeholder="searchPlaceholder"
           :aria-label="searchAriaLabel"
-          @select="onSelect"
+          @select="onCatalogSelect"
         >
           <template #default="{ option }">
             <span
@@ -74,8 +105,43 @@
           </template>
 
           <template #empty>
+            <!--
+              Free-form path. Visible only for the active BYOK scope
+              (`mode === "byok"` or `useOwnApiKey` in `"both"`), only
+              with a non-empty trimmed query, only when the consumer
+              reported no search results, and never while `loading` is
+              on or `error` is set — those should re-use the standard
+              status slots. Validation and free-form lifecycle are
+              entirely consumer-owned; the package only normalises the
+              trimmed string, surfaces its error if any, and emits the
+              selection on commit.
+            -->
+            <div
+              v-if="freeformVisible"
+              class="tr-model-select__freeform"
+            >
+              <button
+                type="button"
+                class="dropdown-item tr-model-select__freeform-action"
+                :disabled="!freeformValid"
+                :aria-label="freeformActionAriaLabel"
+                :title="freeformError || freeformHint"
+                @mousedown.prevent.stop="selectFreeform"
+                @click.prevent="selectFreeform"
+                @keydown.enter.prevent="selectFreeform"
+                @keydown.space.prevent="selectFreeform"
+              >
+                {{ formattedFreeformActionLabel }}
+              </button>
+              <p
+                v-if="freeformError || freeformHint"
+                class="tr-model-select__freeform-hint"
+              >
+                {{ freeformError || freeformHint }}
+              </p>
+            </div>
             <p
-              v-if="error"
+              v-else-if="error"
               class="tr-model-select__empty tr-model-select__empty--error"
               role="alert"
             >
@@ -98,6 +164,19 @@
             </p>
           </template>
         </b-autocomplete>
+
+        <!--
+          Consumer-owned key UI. The package never reads the byok-key
+          slot's value, never stores a secret and never participates in
+          any API or permission policy; only the rendered DOM is
+          placed here.
+        -->
+        <div
+          v-if="$slots['byok-key']"
+          class="tr-model-select__byok-key"
+        >
+          <slot name="byok-key" />
+        </div>
       </div>
     </b-dropdown-item>
   </b-dropdown>
@@ -113,50 +192,43 @@ import {
 } from "../composables/useDropdownOverlay.js";
 
 /**
- * Public model catalog picker.
+ * Public model picker.
  *
- * The closed trigger always displays the canonical selection (looked up
- * by `v-model:modelId` against `models`). Opening shows a single popup
- * built on one outer `b-dropdown`; the first row is the search field
- * rendered through Buefy's `b-autocomplete`. The whole popup is moved
- * and flipped by the shared `useDropdownOverlay` composable, so the
- * search input and the results stay in the same DOM popup —
- * `b-autocomplete` does not create a second body portal and never picks
- * its own direction. Buefy's keyboard/focus/selection/close behaviour,
- * scroll and resize tracking, and modal/drawer layering remain the
- * contract; the component does not add its own outside-click handler
- * and only enhances focus management inside its own popup.
+ * The closed trigger always displays the canonical selection for the
+ * current scope. Three scopes share this single component:
  *
- * This stage (2.1) ships the `mode === "model"` contract. Stage 2.2
- * extends the same component to also accept `mode: "byok"` and
- * `mode: "both"`, with the additional `v-model:use-own-api-key`,
- * `v-model:byok-model-id` and `v-model:provider-model-id` links, a
- * controlled `useOwnApiKey` switch visible only in `"both"`, and a
- * `byok-key` slot for the consumer's BYOK key UI. Today only `"model"`
- * is accepted; the other modes surface a development console warning
- * rather than silently misbehaving.
+ *   - `mode: "model"` — `v-model:modelId` selects one entry from the
+ *     consumer-provided `models` catalog. Opening shows only the
+ *     consumer-supplied `recommendedModels` while the search query is
+ *     empty and only `searchResults` once the user types; the component
+ *     never filters its own catalog and never fetches on its own.
+ *   - `mode: "byok"` — `v-model:byokModelId` selects a catalog BYOK
+ *     entry, `v-model:providerModelId` carries a free-form BYOK
+ *     identifier. They are mutually exclusive: picking a catalog id
+ *     clears the free-form id and vice versa, while leaving any
+ *     unrelated `modelId` alone. When the user types and the consumer
+ *     returns no search results, the package surfaces a
+ *     consumer-controlled free-form action (trimmed id, no whitespace,
+ *     ≤ 255 characters). `loading`/`error` never become a free-form
+ *     candidate.
+ *   - `mode: "both"` — adds a controlled switch over the search row
+ *     bound to `v-model:useOwnApiKey`; the switch is visible only in
+ *     this mode and only flips which v-model link drives the canonical
+ *     display / `update:query` source. Flipping the switch never
+ *     erases the hidden `modelId`/`byokModelId`/`providerModelId`.
  *
- * Data, copy and lifecycle:
+ * Catalog and recommendations for the active scope come from the
+ * consumer via `models`/`recommendedModels`/`searchResults`. There is
+ * exactly one search row — the same one used by `b-autocomplete` — so
+ * the component never creates a second `b-dropdown` or an independent
+ * search field. The active BYOK catalog is still driven by the
+ * consumer's filtering (e.g. OpenRouter scope); this package does not
+ * decode provider identifiers or know which provider is which.
  *
- * - `models` (required): consumer-provided catalog with stable `id`
- *   and `name`; provider metadata (`provider.icon`,
- *   `provider.protocol`, `provider.id`) is read for icon resolution
- *   and may be omitted.
- * - `recommendedModels`: array of `model.id`s shown while the search
- *   query is empty (or only whitespace). When the list is empty the
- *   popup simply shows the empty slot.
- * - `searchResults`: array of full `model` entries shown when the
- *   query is non-empty; `update:query` is emitted as the user types so
- *   the consumer can filter or fetch asynchronously.
- * - `loading` and `error`: consumer-driven request state. When the
- *   visible list is empty the popup shows exactly one caller-provided
- *   message with priority error > loading > empty: `errorLabel`
- *   (`role="alert"`), `loadingLabel` (`role="status"`,
- *   `aria-busy="true"`) or `emptyLabel` (`role="status"`). The
- *   component stays i18n-neutral and ships no built-in strings.
- * - `invalid`: validation state on the closed trigger (`is-danger` +
- *   `aria-invalid`); the popup is hidden while closed, so this is what
- *   a screen reader or form-error summary sees.
+ * Optional `byok-key` slot lets the consumer place its key input
+ * beneath the popup. The package never reads the slot's value, never
+ * stores a secret and never participates in any API or permission
+ * policy; the consumer owns the key lifecycle entirely.
  *
  * The component imports no Pinia store, no router, no fixtures, no
  * secrets, no i18n runtime and no browser global at module setup time;
@@ -164,14 +236,14 @@ import {
  * `chevron-down` from Buefy (required peer).
  */
 
-const SUPPORTED_MODES = ["model"];
+const FREEFORM_MAX_LENGTH = 255;
 
 const props = defineProps({
-  /** @type {import("vue").PropType<"model">} */
+  /** @type {import("vue").PropType<"model" | "byok" | "both">} */
   mode: {
     type: String,
     default: "model",
-    validator: (value) => value === "model",
+    validator: (value) => value === "model" || value === "byok" || value === "both",
   },
   /** @type {import("vue").PropType<Array<{id:string,name:string,provider?:object}>>} */
   models: {
@@ -243,9 +315,46 @@ const props = defineProps({
     type: String,
     default: "",
   },
+  // BYOK switch copy (mode === "both"). Consumer-owned.
+  switchLabel: {
+    type: String,
+    default: "",
+  },
+  switchAriaLabel: {
+    type: String,
+    default: null,
+  },
+  // Free-form BYOK action copy (mode === "byok" or mode === "both" with
+  // `useOwnApiKey` enabled). The package only formats the action label
+  // and hint from these strings + the trimmed query; it never inserts
+  // its own user-facing copy.
+  freeformActionLabel: {
+    type: String,
+    default: "",
+  },
+  freeformActionAriaLabel: {
+    type: String,
+    default: null,
+  },
+  freeformHint: {
+    type: String,
+    default: "",
+  },
+  freeformErrorLabel: {
+    type: String,
+    default: "",
+  },
 });
 
+// Four `v-model` links plus `useOwnApiKey` (controlled in `mode === "both"`,
+// ignored otherwise). `defineModel()` is compiled by the SFC compiler and
+// produces a writable ref + automatic `update:*` emission; assigning `null`
+// (rather than `undefined`) clears the slot the consumer expects, which
+// matches the existing draft semantics.
 const modelId = defineModel("modelId", { type: String, default: null });
+const byokModelId = defineModel("byokModelId", { type: String, default: null });
+const providerModelId = defineModel("providerModelId", { type: String, default: null });
+const useOwnApiKey = defineModel("useOwnApiKey", { type: Boolean, default: false });
 const emit = defineEmits(["update:query"]);
 
 const dropdownRef = ref(null);
@@ -268,6 +377,25 @@ const isOpen = computed(() => isActive.value);
 const trimmedQuery = computed(() => searchQuery.value.trim());
 const hasQuery = computed(() => trimmedQuery.value.length > 0);
 
+// `useOwnApiKey` is only meaningfully controlled in `mode === "both"`;
+// the single-mode shortcuts (`model`/`byok`) treat the scope as fixed.
+const useOwnApiKeyValue = computed(() => {
+  if (props.mode === "byok") return true;
+  if (props.mode === "model") return false;
+  return useOwnApiKey.value === true;
+});
+
+const activeScope = computed(() => (useOwnApiKeyValue.value ? "byok" : "model"));
+
+const isByokScope = computed(() => activeScope.value === "byok");
+
+const scopedRecommendedModels = computed(() => {
+  // In `mode === "both"` the switch picks which `recommendedModels`
+  // subset is shown. Out of scope we still render the empty slot.
+  if (!isByokScope.value) return props.recommendedModels;
+  return props.recommendedModels;
+});
+
 const modelsById = computed(() => {
   const map = new Map();
   for (const model of props.models) {
@@ -280,7 +408,7 @@ const modelsById = computed(() => {
 
 const recommendedEntries = computed(() => {
   const out = [];
-  for (const id of props.recommendedModels) {
+  for (const id of scopedRecommendedModels.value) {
     const model = modelsById.value.get(id);
     if (model) out.push(model);
   }
@@ -299,10 +427,28 @@ const visibleOptions = computed(() => {
   return props.searchResults;
 });
 
+// Canonical display is the only thing that drives the closed trigger —
+// and the scope decides which v-model link defines "selected".
+// The display rule below intentionally mirrors the `.plan` contract:
+// `providerModelId` is never read off the closed trigger (it is a
+// free-form draft, not a chosen catalog entry), and `byokModelId` only
+// participates when the active scope is `byok`.
 const canonicalDisplay = computed(() => {
+  if (isByokScope.value) {
+    if (providerModelId.value && providerModelId.value.length > 0) {
+      // Free-form id always wins in display (it's the draft the
+      // consumer most recently committed) — even in `"both"` with the
+      // switch off, the user typed it last and that's the visible
+      // intent. Catalog selection remains a first-class alternative;
+      // picking it again clears the free-form (see `selectCatalog`).
+      return providerModelId.value;
+    }
+    const id = byokModelId.value;
+    if (id) return modelsById.value.get(id)?.name ?? id;
+  }
   const id = modelId.value;
-  if (id == null || id === "") return "";
-  return modelsById.value.get(id)?.name ?? "";
+  if (id) return modelsById.value.get(id)?.name ?? "";
+  return "";
 });
 
 function providerIconName(option) {
@@ -310,9 +456,16 @@ function providerIconName(option) {
   return provider?.icon || provider?.protocol || provider?.id || "brain";
 }
 
+// The catalog selection marker renders only for the active v-model
+// link. In `mode === "byok"` that means `byokModelId` (the free-form
+// `providerModelId` is not a catalog entry and therefore cannot be
+// marked). In `mode === "both"` the active scope is `useOwnApiKeyValue`.
 function isCatalogSelection(option) {
-  if (!option || !modelId.value) return false;
-  return option.id === modelId.value;
+  if (!option) return false;
+  if (isByokScope.value) {
+    return byokModelId.value !== null && byokModelId.value !== "" && option.id === byokModelId.value;
+  }
+  return modelId.value !== null && modelId.value !== "" && option.id === modelId.value;
 }
 
 function searchInput() {
@@ -340,25 +493,104 @@ function openPicker() {
   }
 }
 
-function onSelect(option) {
+// --- Catalog selection --------------------------------------------------
+//
+// `selectCatalog` is the single mutation point for picking a catalog
+// entry. It enforces the documented exclusivity: in the BYOK scope,
+// picking a `byokModelId` clears `providerModelId`; in the regular
+// scope, picking a `modelId` is independent of the BYOK links. The
+// regular `modelId` is never touched from BYOK selections and vice
+// versa, matching the `.plan` requirement.
+function selectCatalog(option) {
   if (!option || typeof option.id !== "string") return;
-  modelId.value = option.id;
-  // Close explicitly — also when the current model is picked again and
-  // `modelId` does not change — through Buefy's own trigger toggle (a
-  // click on an open dropdown closes it synchronously), then return focus
-  // to the trigger. The pending focus-out check is dropped so it cannot
-  // toggle the dropdown a second time.
+  const id = option.id;
+  if (isByokScope.value) {
+    byokModelId.value = id;
+    if (providerModelId.value !== null) providerModelId.value = null;
+  } else {
+    modelId.value = id;
+  }
   if (isActive.value) triggerButton()?.click?.();
   clearTimeout(focusOutTimer);
   focusOutTimer = null;
   nextTick(focusTrigger);
 }
 
+function onCatalogSelect(option) {
+  if (!option) return;
+  selectCatalog(option);
+}
+
+// --- Free-form lifecycle ------------------------------------------------
+//
+// Free-form is offered only in the BYOK scope, only when the query is
+// non-empty after trim, only when the consumer returned no search
+// results, and never while loading/error are on. Validation is local
+// to this component: the trimmed string must contain no whitespace
+// and be no longer than 255 characters. The package never persists
+// the value, never sends it to an API, and never calls into a
+// provider policy.
+const freeformTrimmed = computed(() => trimmedQuery.value);
+
+const freeformError = computed(() => {
+  if (!freeformTrimmed.value) return "";
+  if (/\s/.test(freeformTrimmed.value)) {
+    return freeformErrorLabel;
+  }
+  if (freeformTrimmed.value.length > FREEFORM_MAX_LENGTH) {
+    return freeformErrorLabel;
+  }
+  return "";
+});
+
+const freeformValid = computed(() => {
+  if (!isByokScope.value) return false;
+  if (props.loading || props.error) return false;
+  if (!freeformTrimmed.value || freeformTrimmed.value.length === 0) return false;
+  return freeformError.value === "";
+});
+
+const freeformCandidateAvailable = computed(() => {
+  if (!isByokScope.value) return false;
+  if (props.loading || props.error) return false;
+  if (!hasQuery.value) return false;
+  return visibleOptions.value.length === 0;
+});
+
+const freeformVisible = computed(() => freeformCandidateAvailable.value);
+
+const formattedFreeformActionLabel = computed(() => {
+  // The action label accepts `{id}` as a placeholder for the trimmed
+  // query; the consumer stays in control of the surrounding copy
+  // because the component ships no built-in translations.
+  const template = freeformActionLabel || "";
+  if (!template.includes("{id}")) return template;
+  return template.replace("{id}", freeformTrimmed.value);
+});
+
+function selectFreeform() {
+  if (!freeformValid.value) return;
+  // Free-form commits the trimmed string and clears any catalog BYOK
+  // id (mutual exclusivity), leaving the regular `modelId` (and any
+  // unknown scope) untouched.
+  const id = freeformTrimmed.value;
+  if (providerModelId.value !== id) providerModelId.value = id;
+  if (byokModelId.value !== null) byokModelId.value = null;
+  if (isActive.value) triggerButton()?.click?.();
+  clearTimeout(focusOutTimer);
+  focusOutTimer = null;
+  nextTick(focusTrigger);
+}
+
+function onSwitchChange(event) {
+  // The component owns no copy and no policy: flipping the switch
+  // only updates the consumer's `v-model:useOwnApiKey`. Hidden
+  // `modelId`/`byokModelId`/`providerModelId` are intentionally
+  // preserved; switching back returns the user to the same draft.
+  useOwnApiKey.value = !!event?.target?.checked;
+}
+
 function onFocusOut(event) {
-  // A pointer selection emits blur before click. Defer the outside
-  // check so Buefy can process that click; focus moving inside the
-  // popover keeps the menu open. Note: Buefy's own `clickedOutside`
-  // handler also closes the menu; this is purely defensive.
   clearTimeout(focusOutTimer);
   focusOutTimer = setTimeout(() => {
     if (!isActive.value) return;
@@ -416,10 +648,6 @@ useDropdownOverlay({
 function onActiveChange(next) {
   isActive.value = !!next;
   if (next) {
-    // Buefy runs `updateAppendToBody` inside a `$nextTick` after its
-    // own watcher flush. Wait one tick so Buefy has populated
-    // `$refs.dropdownMenu`, then refresh local refs and focus the
-    // search field.
     nextTick().then(() => {
       refreshRefs();
       searchQuery.value = "";
@@ -430,8 +658,8 @@ function onActiveChange(next) {
   }
 }
 
-// The single `update:query` source: it fires only when the query really
-// changes, so resetting an already empty query on open emits nothing.
+// `update:query` fires only when the query really changes, so resetting
+// an already-empty query on open emits nothing.
 watch(searchQuery, (value) => {
   emit("update:query", value);
 });
