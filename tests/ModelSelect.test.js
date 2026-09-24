@@ -41,13 +41,14 @@ describe("ModelSelect — public catalog contract (mode=model)", () => {
     expect(wrapper.find(".tr-model-select__trigger-value").text()).toBe("Claude");
   });
 
-  it("falls back to the recommended entry when no modelId is provided", () => {
+  it("does not fall back to a recommended entry when no modelId is provided", () => {
     const wrapper = mountModel({
       models,
       recommendedModels: ["gpt", "claude"],
       modelValue: null,
     });
     expect(wrapper.find(".tr-model-select__trigger-value").text()).toBe("");
+    expect(wrapper.emitted("update:modelValue")).toBeUndefined();
   });
 
   it("shows triggerPlaceholder when no modelId is selected and a placeholder is provided", () => {
@@ -331,6 +332,84 @@ describe("ModelSelect — trigger / overlay lifecycle", () => {
     await openWithArrowDown(wrapper);
     expect(isOpen(wrapper)).toBe(true);
     expect(wrapper.emitted("update:query")).toEqual([["mis"], [""]]);
+    wrapper.unmount();
+  });
+
+  it("opens from the trigger, clears a stale query and focuses the search field", async () => {
+    const wrapper = mountModel({ models, recommendedModels: ["gpt"], modelValue: "gpt" });
+    await triggerButton(wrapper).trigger("click");
+    await settle();
+    expect(isOpen(wrapper)).toBe(true);
+    expect(triggerButton(wrapper).attributes("aria-expanded")).toBe("true");
+    const input = wrapper.find(".tr-model-select__popup input");
+    expect(document.activeElement).toBe(input.element);
+
+    await input.setValue("mis");
+    await settle();
+    await triggerButton(wrapper).trigger("click");
+    await settle();
+    expect(isOpen(wrapper)).toBe(false);
+
+    // Reopen through Buefy's own click toggle (not the ArrowDown helper,
+    // which resets the query itself): the open lifecycle clears it.
+    await triggerButton(wrapper).trigger("click");
+    await settle();
+    expect(isOpen(wrapper)).toBe(true);
+    expect(input.element.value).toBe("");
+    expect(wrapper.vm.searchQuery).toBe("");
+    expect(document.activeElement).toBe(input.element);
+    wrapper.unmount();
+  });
+
+  it("marks the selected catalog entry by id, visibly and for assistive tech", async () => {
+    // Two entries share a display name; only the one whose id matches
+    // v-model:modelId is the selection.
+    const catalog = [
+      { id: "claude-old", name: "Claude", provider: { icon: "anthropic" } },
+      { id: "claude", name: "Claude", provider: { icon: "anthropic" } },
+      { id: "gpt", name: "GPT", provider: { icon: "openai" } },
+    ];
+    const wrapper = mountModel({
+      models: catalog,
+      recommendedModels: ["claude-old", "claude", "gpt"],
+      modelValue: "claude",
+    });
+    await openWithArrowDown(wrapper);
+    expect(isOpen(wrapper)).toBe(true);
+
+    const options = wrapper.findAll(".tr-model-select__option");
+    expect(options).toHaveLength(3);
+    const state = options.map((option) => ({
+      selected: option.classes().includes("tr-model-select__option--selected"),
+      current: option.attributes("aria-current") ?? null,
+      marker: option.find(".tr-model-select__option-marker").exists(),
+    }));
+    expect(state).toEqual([
+      { selected: false, current: null, marker: false },
+      { selected: true, current: "true", marker: true },
+      { selected: false, current: null, marker: false },
+    ]);
+    wrapper.unmount();
+  });
+
+  it("keeps modelId and the trigger display when closed without a selection", async () => {
+    const wrapper = mountModel({
+      models,
+      recommendedModels: ["gpt"],
+      searchResults: [models[2]],
+      modelValue: "claude",
+    });
+    await openWithArrowDown(wrapper);
+    await wrapper.find(".tr-model-select__popup input").setValue("mis");
+    await settle();
+    // The transient query never replaces the canonical display.
+    expect(wrapper.find(".tr-model-select__trigger-value").text()).toBe("Claude");
+
+    await triggerButton(wrapper).trigger("click");
+    await settle();
+    expect(isOpen(wrapper)).toBe(false);
+    expect(wrapper.emitted("update:modelValue")).toBeUndefined();
+    expect(wrapper.find(".tr-model-select__trigger-value").text()).toBe("Claude");
     wrapper.unmount();
   });
 
