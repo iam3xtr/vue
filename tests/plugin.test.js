@@ -37,6 +37,7 @@ describe("trVue plugin", () => {
         "tr-navbar-menu",
         "tr-file-drop-target",
         "tr-form-drawer",
+        "tr-model-select",
         "tr-page-header",
         "tr-navbar-tabs",
         "tr-tariff-summary-card",

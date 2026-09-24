@@ -15,6 +15,7 @@ product-specific URL. Всё это остаётся в каждом потре�
 ```js
 import { Icon, Loader, AsyncState, ListAsyncState, CopyPre, Toolbar, ToolbarDropdown,
          ToolbarSearch, MobileFilters, NavbarMenu, FileDropTarget, FormDrawer,
+         ModelSelect,
          iconRegistryKey, provideIconRegistry, navbarMenuKey, useFocusTrap,
          useDropdownOverlay, resolveDropdownPlacement, POSITIONS,
          DROPDOWN_OVERLAY_MARKER } from "@iam3xtr/vue";
@@ -104,6 +105,7 @@ navigation-компонент как глобальный, под фиксиро
 | `tr-navbar-menu` | `NavbarMenu` |
 | `tr-file-drop-target` | `FileDropTarget` |
 | `tr-form-drawer` | `FormDrawer` |
+| `tr-model-select` | `ModelSelect` |
 | `tr-page-header` | `PageHeader` (`./navigation`) |
 | `tr-navbar-tabs` | `NavbarTabs` (`./navigation`) |
 | `tr-tariff-summary-card` | `TariffSummaryCard` (`./navigation`) |
@@ -140,6 +142,7 @@ default-реестр без этого шага (см. "Реестр иконо�
 | `NavbarMenu` | — (читает injection `navbarMenuKey`) | — | default | — |
 | `FileDropTarget` | `disabled`, `multiple` (по умолчанию `true`), `accept` (расширения/MIME/`image/*`, только клиентская подсказка), `overlayLabel` (по умолчанию `"Отпустите файлы, чтобы загрузить"`) | `files` (`File[]`, только на реальном drop файлов) | default | — |
 | `FormDrawer` | `v-model` (обязателен, open state), `title`, `busy`, `disabled`, `closeAriaLabel` (по умолчанию `"Закрыть"`) | `update:modelValue`, `submit` (не эмитится во время `busy`/`disabled`) | default (form body, scoped `{ busy, disabled }`), `footer` (actions, тот же scope) | Buefy (`b-sidebar`, `b-icon`) |
+| `ModelSelect` | `mode` (этап 2.1 — фиксированно `"model"`), `models` (обязателен, `[{id,name,provider?}]`), `recommendedModels`, `searchResults`, `loading`, `error`, `invalid`, `disabled`, `inputId`, `triggerPlaceholder`, `searchPlaceholder`, `triggerAriaLabel`, `searchAriaLabel`, `triggerTitle`, `emptyLabel`; `v-model:modelId` (канонический выбор) | `update:modelId`, `update:query` | — | Buefy (`b-dropdown`, `b-button`, `b-autocomplete`) |
 
 `ToolbarDropdown` и `MobileFilters` используют общий overlay: открытое меню
 перекрывает следующий контент и меняет направление у края viewport. Если

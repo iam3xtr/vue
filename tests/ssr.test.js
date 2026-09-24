@@ -23,6 +23,7 @@ describe("core entry point on the server", () => {
     expect(mod.NavbarMenu).toBeTruthy();
     expect(mod.FileDropTarget).toBeTruthy();
     expect(mod.FormDrawer).toBeTruthy();
+    expect(mod.ModelSelect).toBeTruthy();
   });
 
   it("server-renders Loader without touching window/document", async () => {
