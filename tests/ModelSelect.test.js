@@ -11,7 +11,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import Buefy from "buefy";
-import { nextTick } from "vue";
+import { h, nextTick } from "vue";
 
 import ModelSelect from "../src/components/ModelSelect.vue";
 
@@ -36,7 +36,7 @@ describe("ModelSelect — public catalog contract (mode=model)", () => {
     const wrapper = mountModel({
       models,
       recommendedModels: ["gpt", "claude"],
-      modelValue: "claude",
+      modelId: "claude",
     });
     expect(wrapper.find(".tr-model-select__trigger-value").text()).toBe("Claude");
   });
@@ -45,32 +45,53 @@ describe("ModelSelect — public catalog contract (mode=model)", () => {
     const wrapper = mountModel({
       models,
       recommendedModels: ["gpt", "claude"],
-      modelValue: null,
+      modelId: null,
     });
     expect(wrapper.find(".tr-model-select__trigger-value").text()).toBe("");
-    expect(wrapper.emitted("update:modelValue")).toBeUndefined();
+    expect(wrapper.emitted("update:modelId")).toBeUndefined();
   });
 
   it("shows triggerPlaceholder when no modelId is selected and a placeholder is provided", () => {
     const wrapper = mountModel({
       models,
       recommendedModels: [],
-      modelValue: null,
+      modelId: null,
       triggerPlaceholder: "Выберите модель",
     });
     expect(wrapper.find(".tr-model-select__trigger-value").text()).toBe("Выберите модель");
   });
 
-  it("forwards v-model:modelId round-trips through update:modelId", async () => {
-    const wrapper = mountModel({ models, recommendedModels: ["gpt"], modelValue: null });
-    // Simulate the consumer's selection handler firing: set the bound
-    // `v-model` from the outside, the prop reflects it.
-    await wrapper.setProps({ modelValue: "gpt" });
-    expect(wrapper.props("modelValue")).toBe("gpt");
+  it("emits update:modelId on selection and round-trips through a parent v-model:model-id", async () => {
+    const wrapper = mountModel({ models, recommendedModels: ["gpt"], modelId: null });
+    wrapper.findComponent({ name: "BAutocomplete" }).vm.$emit("select", models[1]);
+    await nextTick();
+    expect(wrapper.emitted("update:modelId")?.at(-1)).toEqual(["claude"]);
+    expect(wrapper.emitted("update:modelValue")).toBeUndefined();
+
+    // A real consumer binding: the compiled form of the kebab-case
+    // `v-model:model-id` on a parent must receive the selected id and feed it back to the trigger.
+    const Host = {
+      data: () => ({ selected: "gpt" }),
+      render() {
+        return h(ModelSelect, {
+          models,
+          "model-id": this.selected,
+          "onUpdate:model-id": (value) => (this.selected = value),
+        });
+      },
+    };
+    const host = mount(Host, { attachTo: document.body, global: global_ });
+    expect(host.find(".tr-model-select__trigger-value").text()).toBe("GPT");
+    host.findComponent({ name: "BAutocomplete" }).vm.$emit("select", models[1]);
+    await nextTick();
+    expect(host.vm.selected).toBe("claude");
+    expect(host.find(".tr-model-select__trigger-value").text()).toBe("Claude");
+    host.unmount();
+    wrapper.unmount();
   });
 
   it("emits update:query with the raw query value as the user types", async () => {
-    const wrapper = mountModel({ models, recommendedModels: [], modelValue: null });
+    const wrapper = mountModel({ models, recommendedModels: [], modelId: null });
     // Drive the ref directly; the same watcher fires for native input
     // events on the inner `b-autocomplete` once the popup is open.
     wrapper.vm.searchQuery = "gpt";
@@ -85,7 +106,7 @@ describe("ModelSelect — public catalog contract (mode=model)", () => {
       models,
       recommendedModels: ["gpt", "claude"],
       searchResults: models,
-      modelValue: null,
+      modelId: null,
     });
     await nextTick();
     expect(wrapper.vm.visibleOptions).toEqual([
@@ -99,7 +120,7 @@ describe("ModelSelect — public catalog contract (mode=model)", () => {
       models,
       recommendedModels: ["gpt"],
       searchResults: [models[2]],
-      modelValue: null,
+      modelId: null,
     });
     wrapper.vm.searchQuery = "mis";
     await nextTick();
@@ -113,7 +134,7 @@ describe("ModelSelect — public catalog contract (mode=model)", () => {
       models,
       recommendedModels: ["gpt", "claude", "mistral"],
       searchResults: [],
-      modelValue: null,
+      modelId: null,
     });
     wrapper.vm.searchQuery = "anything";
     await nextTick();
@@ -127,7 +148,7 @@ describe("ModelSelect — public catalog contract (mode=model)", () => {
       // the mount proceed — the contract is that any non-`model` value
       // is unsupported, not that it crashes the consumer.
       mount(ModelSelect, {
-        props: { models, mode: "byok", modelValue: null },
+        props: { models, mode: "byok", modelId: null },
         global: global_,
       });
       expect(warn).toHaveBeenCalled();
@@ -143,13 +164,13 @@ describe("ModelSelect — public catalog contract (mode=model)", () => {
     const wrapper = mountModel({
       models,
       recommendedModels: ["gpt", "claude"],
-      modelValue: "gpt",
+      modelId: "gpt",
     });
     expect(wrapper.find(".tr-model-select__trigger-value").text()).toBe("GPT");
   });
 
   it("applies invalid state and aria-invalid on the closed trigger", () => {
-    const wrapper = mountModel({ models, recommendedModels: [], modelValue: null, invalid: true });
+    const wrapper = mountModel({ models, recommendedModels: [], modelId: null, invalid: true });
     const trigger = wrapper.find(".tr-model-select__trigger");
     expect(trigger.classes()).toContain("is-danger");
     expect(trigger.attributes("aria-invalid")).toBe("true");
@@ -162,7 +183,7 @@ describe("ModelSelect — public catalog contract (mode=model)", () => {
     const wrapper = mountModel({
       models,
       recommendedModels: ["gpt"],
-      modelValue: null,
+      modelId: null,
       searchAriaLabel: "Search models",
     });
     const input = wrapper.find(".tr-model-select__popup input");
@@ -179,7 +200,7 @@ describe("ModelSelect — public catalog contract (mode=model)", () => {
       models,
       recommendedModels: ["gpt", "claude"],
       searchResults: [models[2]],
-      modelValue: null,
+      modelId: null,
     });
     const input = wrapper.find(".tr-model-select__popup input");
     await input.trigger("focus");
@@ -208,7 +229,7 @@ describe("ModelSelect — open popup loading / empty / error states", () => {
       models,
       recommendedModels: [],
       searchResults: [],
-      modelValue: null,
+      modelId: null,
       ...labels,
       ...props,
     });
@@ -292,7 +313,7 @@ describe("ModelSelect — trigger / overlay lifecycle", () => {
       models,
       recommendedModels: ["gpt"],
       searchResults: [models[1]],
-      modelValue: "gpt",
+      modelId: "gpt",
     });
     const autocomplete = wrapper.findComponent({ name: "BAutocomplete" });
 
@@ -309,7 +330,7 @@ describe("ModelSelect — trigger / overlay lifecycle", () => {
     autocomplete.vm.setSelected(models[1]);
     await settle();
     expect(isOpen(wrapper)).toBe(false);
-    expect(wrapper.emitted("update:modelValue")?.at(-1)).toEqual(["claude"]);
+    expect(wrapper.emitted("update:modelId")?.at(-1)).toEqual(["claude"]);
 
     // Reopening after the selection cleared the query emits nothing more.
     await openWithArrowDown(wrapper);
@@ -320,7 +341,7 @@ describe("ModelSelect — trigger / overlay lifecycle", () => {
   });
 
   it("emits a single empty update:query when reopening after an abandoned search", async () => {
-    const wrapper = mountModel({ models, recommendedModels: ["gpt"], modelValue: "gpt" });
+    const wrapper = mountModel({ models, recommendedModels: ["gpt"], modelId: "gpt" });
     await openWithArrowDown(wrapper);
     await wrapper.findComponent({ name: "BAutocomplete" }).find("input").setValue("mis");
     await settle();
@@ -336,7 +357,7 @@ describe("ModelSelect — trigger / overlay lifecycle", () => {
   });
 
   it("opens from the trigger, clears a stale query and focuses the search field", async () => {
-    const wrapper = mountModel({ models, recommendedModels: ["gpt"], modelValue: "gpt" });
+    const wrapper = mountModel({ models, recommendedModels: ["gpt"], modelId: "gpt" });
     await triggerButton(wrapper).trigger("click");
     await settle();
     expect(isOpen(wrapper)).toBe(true);
@@ -372,7 +393,7 @@ describe("ModelSelect — trigger / overlay lifecycle", () => {
     const wrapper = mountModel({
       models: catalog,
       recommendedModels: ["claude-old", "claude", "gpt"],
-      modelValue: "claude",
+      modelId: "claude",
     });
     await openWithArrowDown(wrapper);
     expect(isOpen(wrapper)).toBe(true);
@@ -397,7 +418,7 @@ describe("ModelSelect — trigger / overlay lifecycle", () => {
       models,
       recommendedModels: ["gpt"],
       searchResults: [models[2]],
-      modelValue: "claude",
+      modelId: "claude",
     });
     await openWithArrowDown(wrapper);
     await wrapper.find(".tr-model-select__popup input").setValue("mis");
@@ -408,13 +429,13 @@ describe("ModelSelect — trigger / overlay lifecycle", () => {
     await triggerButton(wrapper).trigger("click");
     await settle();
     expect(isOpen(wrapper)).toBe(false);
-    expect(wrapper.emitted("update:modelValue")).toBeUndefined();
+    expect(wrapper.emitted("update:modelId")).toBeUndefined();
     expect(wrapper.find(".tr-model-select__trigger-value").text()).toBe("Claude");
     wrapper.unmount();
   });
 
   it("reopens with ArrowDown after the popup was opened and closed once", async () => {
-    const wrapper = mountModel({ models, recommendedModels: ["gpt"], modelValue: "gpt" });
+    const wrapper = mountModel({ models, recommendedModels: ["gpt"], modelId: "gpt" });
     await openWithArrowDown(wrapper);
     expect(isOpen(wrapper)).toBe(true);
 
@@ -428,7 +449,7 @@ describe("ModelSelect — trigger / overlay lifecycle", () => {
   });
 
   it("closes the popup and focuses the trigger when the current model is selected again", async () => {
-    const wrapper = mountModel({ models, recommendedModels: ["gpt", "claude"], modelValue: "claude" });
+    const wrapper = mountModel({ models, recommendedModels: ["gpt", "claude"], modelId: "claude" });
     await openWithArrowDown(wrapper);
     expect(isOpen(wrapper)).toBe(true);
 
@@ -445,7 +466,7 @@ describe("ModelSelect — trigger / overlay lifecycle", () => {
     window.addEventListener("error", onError);
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
-      const wrapper = mountModel({ models, recommendedModels: ["gpt", "claude"], modelValue: "gpt" });
+      const wrapper = mountModel({ models, recommendedModels: ["gpt", "claude"], modelId: "gpt" });
       await openWithArrowDown(wrapper);
       expect(isOpen(wrapper)).toBe(true);
 
@@ -458,7 +479,7 @@ describe("ModelSelect — trigger / overlay lifecycle", () => {
 
       selectOption(wrapper, models[1]);
       await settle();
-      expect(wrapper.emitted("update:modelValue")?.at(-1)).toEqual(["claude"]);
+      expect(wrapper.emitted("update:modelId")?.at(-1)).toEqual(["claude"]);
       expect(isOpen(wrapper)).toBe(false);
       expect(document.activeElement).toBe(triggerButton(wrapper).element);
 
@@ -487,7 +508,7 @@ describe("ModelSelect — package boundary (no Vue Router / no Pinia)", () => {
     const wrapper = mountModel({
       models,
       recommendedModels: ["gpt"],
-      modelValue: null,
+      modelId: null,
     });
     await nextTick();
     expect(wrapper.exists()).toBe(true);
@@ -497,7 +518,7 @@ describe("ModelSelect — package boundary (no Vue Router / no Pinia)", () => {
     const wrapper = mountModel({
       models,
       recommendedModels: ["gpt", "claude", "mistral"],
-      modelValue: null,
+      modelId: null,
     });
     // The Vue template compiles the option rows; with Buefy not fully
     // driving the popup in unit tests we assert the trigger chrome and

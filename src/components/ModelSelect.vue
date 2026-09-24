@@ -245,7 +245,7 @@ const props = defineProps({
   },
 });
 
-const modelId = defineModel({ type: String, default: null });
+const modelId = defineModel("modelId", { type: String, default: null });
 const emit = defineEmits(["update:query"]);
 
 const dropdownRef = ref(null);
