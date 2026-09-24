@@ -15,7 +15,9 @@ product-specific URL. Всё это остаётся в каждом потре�
 ```js
 import { Icon, Loader, AsyncState, ListAsyncState, CopyPre, Toolbar, ToolbarDropdown,
          ToolbarSearch, MobileFilters, NavbarMenu, FileDropTarget, FormDrawer,
-         iconRegistryKey, provideIconRegistry, navbarMenuKey, useFocusTrap } from "@iam3xtr/vue";
+         iconRegistryKey, provideIconRegistry, navbarMenuKey, useFocusTrap,
+         useDropdownOverlay, resolveDropdownPlacement, POSITIONS,
+         DROPDOWN_OVERLAY_MARKER } from "@iam3xtr/vue";
 
 import { PageHeader, NavbarTabs, TariffSummaryCard } from "@iam3xtr/vue/navigation";
 
@@ -138,6 +140,25 @@ default-реестр без этого шага (см. "Реестр иконо�
 | `NavbarMenu` | — (читает injection `navbarMenuKey`) | — | default | — |
 | `FileDropTarget` | `disabled`, `multiple` (по умолчанию `true`), `accept` (расширения/MIME/`image/*`, только клиентская подсказка), `overlayLabel` (по умолчанию `"Отпустите файлы, чтобы загрузить"`) | `files` (`File[]`, только на реальном drop файлов) | default | — |
 | `FormDrawer` | `v-model` (обязателен, open state), `title`, `busy`, `disabled`, `closeAriaLabel` (по умолчанию `"Закрыть"`) | `update:modelValue`, `submit` (не эмитится во время `busy`/`disabled`) | default (form body, scoped `{ busy, disabled }`), `footer` (actions, тот же scope) | Buefy (`b-sidebar`, `b-icon`) |
+
+`ToolbarDropdown` и `MobileFilters` используют общий overlay: открытое меню
+перекрывает следующий контент и меняет направление у края viewport. Если
+предок обрезает overflow, меню переносится в Buefy body portal; внутри
+modal/drawer/другого dropdown оно остаётся в том же DOM-контексте и при
+необходимости получает `position: fixed`. Положение обновляется при
+scroll/resize. Buefy сохраняет управление закрытием, клавиатурой и mobile
+modal; компоненты не вводят собственных обработчиков этих действий.
+
+Для других `b-dropdown` core entrypoint экспортирует
+`resolveDropdownPlacement(anchor)`, `useDropdownOverlay(options)`, четыре
+значения `POSITIONS` и класс-маркер `DROPDOWN_OVERLAY_MARKER`. Вызывайте
+resolver после mount корневого `.dropdown`: он возвращает `"inline"`,
+`"fixed"` или `"portal"`. Передайте в composable refs на Buefy trigger,
+`.dropdown-menu`, его ближайший `.dropdown` wrapper, состояние из
+`active-change` и связанный с `position` ref; `appendToBody` задаёт portal,
+`fixed` — закрепление внутри обрезающего modal/drawer. При portal Buefy
+перемещает menu в `body`, поэтому refs на menu и wrapper надо обновить после
+открытия. Импорт entrypoint не требует browser globals.
 
 Каждый текстовый пропс выше по умолчанию на русском — по кабинету-эталону,
 из которого извлечён этот пакет; передавайте свои строки для локализации.
