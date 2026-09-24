@@ -251,6 +251,22 @@ BYOK-каталог + свободный BYOK identifier (`mode === "byok"`) и
   consumer не вернул результатов; `loading === false` и `error === false`.
   Trimmed id без пробелов и длиной ≤ 255 символов; некорректный ввод
   блокирует кнопку и подсвечивается `freeformErrorLabel`.
+  `freeformActionLabel` поддерживает placeholder `{id}`: первое его
+  вхождение заменяется trimmed query (например, `Использовать «{id}»`);
+  без placeholder строка выводится как есть.
+- Принятие free-form id с клавиатуры — Enter в строке поиска, пока
+  free-form действие видимо (IME composition игнорируется). Кнопка
+  действия находится в `#empty` slot `b-autocomplete` и недостижима
+  Tab/стрелками: Tab закрывает popup, стрелки ходят только по списку
+  результатов. Кнопка остаётся pointer-путём; подсказку про Enter при
+  необходимости передайте через `freeformHint`.
+- Компонент принимает один набор `models` / `recommendedModels` /
+  `searchResults` и сам не делит его по scope. В `mode === "both"`
+  consumer подменяет все три массива по текущему `useOwnApiKey`
+  (например, в BYOK scope — только OpenRouter-модели) и держит в
+  `models` записи активного scope, чтобы trigger и отметка выбора
+  находили имя по id. Неизвестный `byokModelId` trigger показывает как
+  сам id.
 - `loading` / `error` — состояние запроса consumer. Когда видимый список
   пуст, popup показывает ровно одно сообщение с приоритетом
   error > loading > empty: `errorLabel` (`role="alert"`), `loadingLabel`
@@ -332,6 +348,22 @@ watch(() => props.models, (next) => {
   <input type="hidden" name="model" :value="modelId ?? ''" />
 </template>
 ```
+
+#### Адаптация BYOK: demo и production
+
+Текущие selectors с BYOK устроены иначе, чем пакет; при переходе
+consumer явно переносит их поведение в свой adapter:
+
+| Текущее поведение | Адаптация к `ModelSelect` |
+| --- | --- |
+| Demo `src/components/agents/ModelSelect.vue` с `:use-own-api-key="true"`, `v-model` + `v-model:provider-model-id` | `mode="byok"`, `v-model:byok-model-id` + `v-model:provider-model-id`. |
+| Demo: внешний `b-switch` BYOK рядом с двумя selectors | `mode="both"` и `v-model:use-own-api-key` вместо двух экземпляров либо внешний switch + `mode` `model`/`byok`. |
+| Demo: при выключении BYOK очищается `providerModelId` | Пакет draft не стирает; очистка при выключении или перед save — решение consumer. |
+| Demo и production: OpenRouter filter в BYOK scope | Consumer фильтрует `models`/`recommendedModels`/`searchResults` сам (см. выше). |
+| Production `get.3xtr.im`: одно `modelValue` для обычной и BYOK-модели | Consumer раскладывает сохранённое значение в `modelId` или `byokModelId` по `useOwnApiKey` при загрузке и собирает payload из активной связи при save. |
+| Production: switch виден по permission `agents.api_key.use` | Consumer выбирает `mode`: без permission — `model`, с permission — `both`. Пакет permission не проверяет. |
+| Production: поле API key (text/password) внутри selector | Поле ключа или выбор сохранённого ключа (как demo `ApiKeySelect`) consumer рендерит в slot `byok-key` или рядом; пакет secret не принимает. |
+| Production: recommended fallback на весь каталог, `returnObject`, hidden `name`, auto-select | См. «Адаптация production-формы»: всё — на стороне consumer. |
 
 Перенос `ModelSelect` в `get.3xtr.im` — отдельная задача consumer
 (`get.3xtr.im#19`, после `api.3xtr.im#112`); этот пакет её не выполняет.

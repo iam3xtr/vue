@@ -390,13 +390,6 @@ const activeScope = computed(() => (useOwnApiKeyValue.value ? "byok" : "model"))
 
 const isByokScope = computed(() => activeScope.value === "byok");
 
-const scopedRecommendedModels = computed(() => {
-  // In `mode === "both"` the switch picks which `recommendedModels`
-  // subset is shown. Out of scope we still render the empty slot.
-  if (!isByokScope.value) return props.recommendedModels;
-  return props.recommendedModels;
-});
-
 const modelsById = computed(() => {
   const map = new Map();
   for (const model of props.models) {
@@ -409,7 +402,9 @@ const modelsById = computed(() => {
 
 const recommendedEntries = computed(() => {
   const out = [];
-  for (const id of scopedRecommendedModels.value) {
+  // The consumer swaps `recommendedModels` for the active scope
+  // (`useOwnApiKey` in `mode === "both"`); the component uses one set.
+  for (const id of props.recommendedModels) {
     const model = modelsById.value.get(id);
     if (model) out.push(model);
   }
