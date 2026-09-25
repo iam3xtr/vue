@@ -169,3 +169,71 @@ describe("MessageComposer — package boundary", () => {
         wrapper.unmount();
     });
 });
+
+describe("MessageComposer — auto-grow geometry (task 3)", () => {
+    it("resets the textarea height to 'auto' before measuring", async () => {
+        const wrapper = mountComposer({ modelValue: "hello" });
+        const ta = wrapper.find("textarea").element;
+        // jsdom doesn't render text, so the natural scrollHeight is
+        // 0; the important contract is that the component clears the
+        // previous inline height before reading scrollHeight.
+        await nextTick();
+        expect(ta.style.height).toBe("0px");
+        wrapper.unmount();
+    });
+
+    it("writes the natural scrollHeight back as the new inline height", async () => {
+        const wrapper = mountComposer({ modelValue: "hello" });
+        const ta = wrapper.find("textarea").element;
+        // Stub scrollHeight to a known value and confirm it ends up
+        // on style.height (replacing the previous "auto").
+        Object.defineProperty(ta, "scrollHeight", { configurable: true, value: 42 });
+        await wrapper.setProps({ modelValue: "hello world" });
+        await nextTick();
+        // requestAnimationFrame fires asynchronously; allow a microtask.
+        await new Promise((r) => setTimeout(r, 0));
+        expect(ta.style.height).toBe("42px");
+        wrapper.unmount();
+    });
+
+    it("resizes on every external modelValue change (controlled reset)", async () => {
+        const wrapper = mountComposer({ modelValue: "hello" });
+        const ta = wrapper.find("textarea").element;
+        Object.defineProperty(ta, "scrollHeight", { configurable: true, value: 18 });
+        await wrapper.setProps({ modelValue: "hello" });
+        await nextTick();
+        await new Promise((r) => setTimeout(r, 0));
+        expect(ta.style.height).toBe("18px");
+
+        Object.defineProperty(ta, "scrollHeight", { configurable: true, value: 96 });
+        await wrapper.setProps({ modelValue: "hello\nworld\nfoo\nbar\nbaz" });
+        await nextTick();
+        await new Promise((r) => setTimeout(r, 0));
+        expect(ta.style.height).toBe("96px");
+
+        // Clearing the draft shrinks the textarea back to the single-line
+        // height the package stylesheet reserves.
+        Object.defineProperty(ta, "scrollHeight", { configurable: true, value: 18 });
+        await wrapper.setProps({ modelValue: "" });
+        await nextTick();
+        await new Promise((r) => setTimeout(r, 0));
+        expect(ta.style.height).toBe("18px");
+        wrapper.unmount();
+    });
+
+    it("caps at the package's max-height (100px) once scrollHeight exceeds it; the textarea scrolls inside instead", () => {
+        // The CSS contract is owned by `@iam3xtr/ui`'s
+        // `.tr-message-composer__textarea` rule: `max-height: 100px;
+        // overflow-y: auto;`. Unit-level jsdom cannot render the
+        // computed style reliably, so this test pins the source-side
+        // rules instead.
+        const fs = require("node:fs");
+        const path = require("node:path");
+        const themePath = path.resolve(__dirname, "../../ui/src/styles/theme.scss");
+        const src = fs.readFileSync(themePath, "utf8");
+        const block = src.match(/\.tr-message-composer__textarea\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+        expect(block).toMatch(/max-height:\s*100px/);
+        expect(block).toMatch(/overflow-y:\s*auto/);
+        expect(block).toMatch(/resize:\s*none/);
+    });
+});

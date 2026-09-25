@@ -44,13 +44,13 @@
 /**
  * Public message composer.
  *
- * The composer owns the controlled draft surface and the keyboard /
- * pointer submit semantics. It does **not** send anything: every submit
- * fires `submit` with the trimmed, non-empty draft and lets the consumer
- * decide whether the message was actually delivered. The draft is never
- * cleared by this component — the consumer resets `v-model` itself after
- * a successful send (or keeps it on failure, so the user does not lose
- * typed text).
+ * The composer owns the controlled draft surface, the keyboard / pointer
+ * submit semantics, and the auto-grow textarea geometry. It does **not**
+ * send anything: every submit fires `submit` with the trimmed, non-empty
+ * draft and lets the consumer decide whether the message was actually
+ * delivered. The draft is never cleared by this component — the consumer
+ * resets `v-model` itself after a successful send (or keeps it on
+ * failure, so the user does not lose typed text).
  *
  * Props:
  *
@@ -99,6 +99,25 @@
  *   instead of submitting, and the explicit button stays available with
  *   the same `submit` contract.
  *
+ * Auto-grow geometry:
+ *
+ * - The textarea always starts at one row tall (`rows="1"` plus the
+ *   package's `.tr-message-composer__textarea` styles).
+ * - On every input and on every external `modelValue` change the
+ *   component resets the textarea height to `auto`, reads the natural
+ *   `scrollHeight`, and sets `style.height` to that value.
+ * - The package-level stylesheet caps the textarea at a documented
+ *   `max-height` (the 100px visual reference from `chat.3xtr.im`); once
+ *   the natural height reaches the cap the textarea falls back to
+ *   `overflow-y: auto` and the user scrolls within the composer
+ *   instead of growing into history. A controlled reset of the draft
+ *   shrinks the textarea back to one row.
+ * - In a bounded chat pane the composer stays anchored at the bottom;
+ *   the textarea's `align-self: flex-end` keeps the submit button in
+ *   view as the draft grows. On narrow/mobile the submit button
+ *   remains visible and accessible — `flex: 0 0 auto` on the button
+ *   prevents the column from collapsing it.
+ *
  * The component imports no Pinia store, no router, no fixtures, no
  * secrets, no i18n runtime and no browser global. It renders no Buefy
  * components itself; consumers may style the textarea/button through
@@ -111,7 +130,7 @@
  * class names keep their rendering.
  */
 
-import { computed, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 
 const props = defineProps({
     modelValue: {
@@ -185,6 +204,66 @@ function onFormSubmit() {
     // activation source.
     emitSubmit();
 }
+
+// Auto-grow: on every input (and on every external `modelValue`
+// change) reset the textarea height to `auto`, read its natural
+// `scrollHeight`, and set the inline `height` back to that value. The
+// `auto` step is essential: without it, `scrollHeight` is capped at
+// the current height and a subsequent growth would be missed. The
+// package stylesheet sets `max-height` so the natural `scrollHeight`
+// is bounded; once the cap is hit the textarea falls back to its
+// `overflow-y: auto` and the user scrolls within the composer.
+let pendingRaf = null;
+function autosize() {
+    const ta = textareaRef.value;
+    if (!ta) return;
+    if (pendingRaf !== null) return;
+    pendingRaf = typeof window !== "undefined" && typeof window.requestAnimationFrame === "function"
+        ? window.requestAnimationFrame(() => {
+            pendingRaf = null;
+            applyAutosize();
+        })
+        : null;
+    if (pendingRaf === null) {
+        // No browser raf (e.g. SSR) — apply synchronously. SSR doesn't
+        // measure anyway; this branch only exists so the function is
+        // safe to call from any lifecycle hook.
+        applyAutosize();
+    }
+}
+
+function applyAutosize() {
+    const ta = textareaRef.value;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${ta.scrollHeight}px`;
+}
+
+watch(
+    () => props.modelValue,
+    () => {
+        // Recompute on every external value change (consumer reset,
+        // store update, IME commit, etc.). The next tick guarantees
+        // the textarea's `value` reflects the new `modelValue` before
+        // we measure.
+        nextTick(autosize);
+    },
+    { immediate: false },
+);
+
+// `onInput` does not call `autosize` directly — the consumer's
+// `update:modelValue` propagates back into the watcher on the next
+// tick, which is the single measurement point for both internal
+// typing and external resets. This avoids double-measuring every
+// keystroke and keeps the controlled `v-model` as the only source of
+// truth for the draft text.
+
+onBeforeUnmount(() => {
+    if (pendingRaf !== null && typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function") {
+        window.cancelAnimationFrame(pendingRaf);
+        pendingRaf = null;
+    }
+});
 
 defineExpose({
     focus: () => textareaRef.value?.focus?.(),
