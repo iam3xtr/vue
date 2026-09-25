@@ -238,6 +238,12 @@ import {
  */
 
 const FREEFORM_MAX_LENGTH = 255;
+// Built-in copy fallback for the free-form rule violation. The actual
+// validation rule (no whitespace, ≤ 255 characters) is a package
+// invariant — it never depends on consumer copy. The consumer-supplied
+// `freeformErrorLabel` replaces this fallback in the visible slot when
+// provided, but `freeformValid` must always enforce the rule itself.
+const FREEFORM_DEFAULT_ERROR = "Invalid identifier";
 
 const props = defineProps({
   /** @type {import("vue").PropType<"model" | "byok" | "both">} */
@@ -528,22 +534,31 @@ function onCatalogSelect(option) {
 // provider policy.
 const freeformTrimmed = computed(() => trimmedQuery.value);
 
+// Validation rule — pure boolean, package invariant. Does not depend on
+// any consumer-provided copy: even if `freeformErrorLabel` is missing or
+// empty, an invalid id is still rejected by `freeformValid`.
+const freeformRuleViolated = computed(() => {
+  if (!freeformTrimmed.value) return false;
+  if (/\s/.test(freeformTrimmed.value)) return true;
+  if (freeformTrimmed.value.length > FREEFORM_MAX_LENGTH) return true;
+  return false;
+});
+
+// Visible error text shown next to the free-form action. Prefers the
+// consumer's `freeformErrorLabel`; falls back to a built-in invariant
+// string when the consumer did not provide one, so the user always sees
+// *something* explaining why the action is disabled. Validity never
+// reads this string — see `freeformValid`.
 const freeformError = computed(() => {
-  if (!freeformTrimmed.value) return "";
-  if (/\s/.test(freeformTrimmed.value)) {
-    return props.freeformErrorLabel;
-  }
-  if (freeformTrimmed.value.length > FREEFORM_MAX_LENGTH) {
-    return props.freeformErrorLabel;
-  }
-  return "";
+  if (!freeformRuleViolated.value) return "";
+  return props.freeformErrorLabel || FREEFORM_DEFAULT_ERROR;
 });
 
 const freeformValid = computed(() => {
   if (!isByokScope.value) return false;
   if (props.loading || props.error) return false;
   if (!freeformTrimmed.value || freeformTrimmed.value.length === 0) return false;
-  return freeformError.value === "";
+  return !freeformRuleViolated.value;
 });
 
 const freeformCandidateAvailable = computed(() => {

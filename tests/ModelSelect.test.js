@@ -921,6 +921,59 @@ describe("ModelSelect — free-form BYOK action", () => {
         expect(errors).toEqual([]);
         wrapper.unmount();
     });
+
+    // Regression: validation must reject invalid ids even when the
+    // consumer does not supply `freeformErrorLabel`. Validity is a
+    // package invariant; the visible text is the only thing the
+    // consumer copy gates.
+    describe("without freeformErrorLabel", () => {
+        for (const props of [{ mode: "byok" }, { mode: "both", useOwnApiKey: true }]) {
+            it(`still disables the action for an id with whitespace (${props.mode})`, async () => {
+                const errors = [];
+                const wrapper = await typeQuery(
+                    {
+                        ...props,
+                        freeformActionLabel: "Use {id}",
+                        freeformErrorLabel: "",
+                        freeformHint: "",
+                    },
+                    "vendor model",
+                    errors,
+                );
+                const action = wrapper.find(".tr-model-select__freeform-action");
+                expect(action.exists()).toBe(true);
+                expect(action.attributes("disabled")).toBeDefined();
+                // Pressing Enter must NOT commit a new providerModelId.
+                await pressEnter(wrapper);
+                expect(wrapper.emitted("update:providerModelId")).toBeUndefined();
+                expect(wrapper.emitted("update:byokModelId")).toBeUndefined();
+                expect(errors).toEqual([]);
+                wrapper.unmount();
+            });
+
+            it(`still disables the action for an id over 255 chars (${props.mode})`, async () => {
+                const errors = [];
+                const wrapper = await typeQuery(
+                    {
+                        ...props,
+                        freeformActionLabel: "Use {id}",
+                        freeformErrorLabel: "",
+                        freeformHint: "",
+                    },
+                    "m".repeat(256),
+                    errors,
+                );
+                const action = wrapper.find(".tr-model-select__freeform-action");
+                expect(action.exists()).toBe(true);
+                expect(action.attributes("disabled")).toBeDefined();
+                await pressEnter(wrapper);
+                expect(wrapper.emitted("update:providerModelId")).toBeUndefined();
+                expect(wrapper.emitted("update:byokModelId")).toBeUndefined();
+                expect(errors).toEqual([]);
+                wrapper.unmount();
+            });
+        }
+    });
 });
 
 describe("ModelSelect — package boundary (no Vue Router / no Pinia)", () => {
