@@ -25,6 +25,7 @@ export { default as NavbarMenu } from "./components/NavbarMenu.vue";
 export { default as FileDropTarget } from "./components/FileDropTarget.vue";
 export { default as FormDrawer } from "./components/FormDrawer.vue";
 export { default as ModelSelect } from "./components/ModelSelect.vue";
+export { default as ChatHistory } from "./components/ChatHistory.vue";
 
 export { iconRegistryKey, provideIconRegistry } from "./icon-registry.js";
 export { navbarMenuKey } from "./composables/navbarMenu.js";

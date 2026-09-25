@@ -24,6 +24,7 @@ describe("core entry point on the server", () => {
     expect(mod.FileDropTarget).toBeTruthy();
     expect(mod.FormDrawer).toBeTruthy();
     expect(mod.ModelSelect).toBeTruthy();
+    expect(mod.ChatHistory).toBeTruthy();
   });
 
   it("server-renders Loader without touching window/document", async () => {
@@ -85,4 +86,21 @@ describe("core entry point on the server", () => {
   // registered, which is exactly the Buefy-SSR-compat scope this file's own
   // contract (see header comment) leaves out. Its component test file
   // covers behavior with Buefy mounted instead.
+
+  it("server-renders ChatHistory without throwing or needing Buefy", async () => {
+    const { ChatHistory } = await import("../src/index.js");
+    const messages = [
+      { id: "m1", text: "hi", outgoing: false },
+      { id: "m2", text: "hello", outgoing: true },
+    ];
+    const html = await renderToString(
+      createSSRApp(ChatHistory, { messages, ariaLabel: "Chat history" }),
+    );
+    expect(html).toContain("tr-chat-history");
+    expect(html).toContain("tr-chat-history__message");
+    expect(html).toContain("tr-chat-history__message--outgoing");
+    expect(html).toContain('aria-label="Chat history"');
+    expect(html).toContain("hi");
+    expect(html).toContain("hello");
+  });
 });

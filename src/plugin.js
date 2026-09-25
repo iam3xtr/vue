@@ -26,6 +26,7 @@ import NavbarMenu from "./components/NavbarMenu.vue";
 import FileDropTarget from "./components/FileDropTarget.vue";
 import FormDrawer from "./components/FormDrawer.vue";
 import ModelSelect from "./components/ModelSelect.vue";
+import ChatHistory from "./components/ChatHistory.vue";
 import PageHeader from "./components/navigation/PageHeader.vue";
 import NavbarTabs from "./components/navigation/NavbarTabs.vue";
 import TariffSummaryCard from "./components/navigation/TariffSummaryCard.vue";
@@ -50,6 +51,7 @@ export const trVueComponents = {
   "tr-file-drop-target": FileDropTarget,
   "tr-form-drawer": FormDrawer,
   "tr-model-select": ModelSelect,
+  "tr-chat-history": ChatHistory,
   "tr-page-header": PageHeader,
   "tr-navbar-tabs": NavbarTabs,
   "tr-tariff-summary-card": TariffSummaryCard,
