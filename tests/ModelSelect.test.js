@@ -711,6 +711,36 @@ describe("ModelSelect — mode=byok (BYOK only)", () => {
         });
         expect(wrapper.find(".tr-model-select__switch-row").exists()).toBe(false);
     });
+
+    it("falls back to the triggerPlaceholder, not regular modelId, when both BYOK ids are empty (mode=byok)", () => {
+        // Regression: in the BYOK scope the trigger must not silently
+        // fall back to the regular `modelId`; an empty BYOK draft
+        // shows the consumer's `triggerPlaceholder`, never a regular
+        // catalog selection.
+        const wrapper = mountModel({
+            mode: "byok",
+            models,
+            recommendedModels: ["gpt"],
+            modelId: "gpt",
+            byokModelId: null,
+            providerModelId: null,
+            triggerPlaceholder: "Choose a key",
+        });
+        expect(wrapper.find(".tr-model-select__trigger-value").text()).toBe("Choose a key");
+    });
+
+    it("shows an empty string when both BYOK ids are empty and no placeholder is provided (mode=byok)", () => {
+        const wrapper = mountModel({
+            mode: "byok",
+            models,
+            recommendedModels: ["gpt"],
+            modelId: "gpt",
+            byokModelId: null,
+            providerModelId: null,
+            triggerPlaceholder: "",
+        });
+        expect(wrapper.find(".tr-model-select__trigger-value").text()).toBe("");
+    });
 });
 
 describe("ModelSelect — mode=both (mode switch)", () => {
@@ -765,6 +795,27 @@ describe("ModelSelect — mode=both (mode switch)", () => {
         // modelId — modelId stays bound to the consumer.
         await wrapper.setProps({ useOwnApiKey: true });
         expect(wrapper.find(".tr-model-select__trigger-value").text()).toBe("Claude");
+    });
+
+    it("BYOK scope with both BYOK ids empty shows the triggerPlaceholder, not modelId (mode=both)", async () => {
+        // Regression: with `useOwnApiKey === true` the active scope is
+        // BYOK; an empty BYOK draft must surface the placeholder, not
+        // silently display the regular catalog selection.
+        const wrapper = mountModel({
+            mode: "both",
+            models,
+            recommendedModels: ["claude"],
+            modelId: "gpt",
+            byokModelId: null,
+            providerModelId: null,
+            useOwnApiKey: true,
+            switchLabel: "BYOK",
+            triggerPlaceholder: "Choose a key",
+        });
+        expect(wrapper.find(".tr-model-select__trigger-value").text()).toBe("Choose a key");
+        await wrapper.setProps({ useOwnApiKey: false });
+        // Flipping back to the regular scope re-exposes modelId.
+        expect(wrapper.find(".tr-model-select__trigger-value").text()).toBe("GPT");
     });
 });
 

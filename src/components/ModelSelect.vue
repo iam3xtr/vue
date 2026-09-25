@@ -430,11 +430,15 @@ const visibleOptions = computed(() => {
 });
 
 // Canonical display is the only thing that drives the closed trigger —
-// and the scope decides which v-model link defines "selected".
-// The display rule below intentionally mirrors the `.plan` contract:
+// and the scope decides which v-model link defines "selected". The
+// display rule below intentionally mirrors the `.plan` contract:
 // `providerModelId` is never read off the closed trigger (it is a
 // free-form draft, not a chosen catalog entry), and `byokModelId` only
-// participates when the active scope is `byok`.
+// participates when the active scope is `byok`. Crucially, the BYOK
+// scope never falls back to `modelId` — when neither BYOK link is set
+// the trigger shows the BYOK placeholder, never the regular catalog id,
+// so the user is never misled into thinking a model is selected while
+// the active scope is BYOK.
 const canonicalDisplay = computed(() => {
   if (isByokScope.value) {
     if (providerModelId.value && providerModelId.value.length > 0) {
@@ -447,6 +451,9 @@ const canonicalDisplay = computed(() => {
     }
     const id = byokModelId.value;
     if (id) return modelsById.value.get(id)?.name ?? id;
+    // No BYOK selection in the active BYOK scope — show the placeholder,
+    // not the regular catalog id, even if `modelId` is non-empty.
+    return "";
   }
   const id = modelId.value;
   if (id) return modelsById.value.get(id)?.name ?? "";
