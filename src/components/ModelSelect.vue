@@ -90,7 +90,7 @@
               :class="{ 'tr-model-select__option--selected': isCatalogSelection(option) }"
               :aria-current="isCatalogSelection(option) ? 'true' : undefined"
             >
-              <icon
+              <Icon
                 :name="providerIconName(option)"
                 aria-hidden="true"
               />
@@ -185,6 +185,8 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from "vue";
+
+import Icon from "./Icon.vue";
 
 import {
   POSITIONS,

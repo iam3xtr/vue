@@ -168,6 +168,13 @@ describe("ModelSelect — mode=model (catalog)", () => {
         ]);
     });
 
+    it("renders provider icons without relying on global component registration", async () => {
+        const wrapper = mountModel({ models, recommendedModels: ["gpt"], modelId: "gpt" });
+        await openWithArrowDown(wrapper);
+        expect(wrapper.find(".tr-model-select__option .tr-icon").exists()).toBe(true);
+        wrapper.unmount();
+    });
+
     it("uses consumer-supplied searchResults when the query is non-empty", async () => {
         const wrapper = mountModel({
             models,
