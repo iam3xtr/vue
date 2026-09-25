@@ -25,6 +25,7 @@ describe("core entry point on the server", () => {
     expect(mod.FormDrawer).toBeTruthy();
     expect(mod.ModelSelect).toBeTruthy();
     expect(mod.ChatHistory).toBeTruthy();
+    expect(mod.MessageComposer).toBeTruthy();
   });
 
   it("server-renders Loader without touching window/document", async () => {
@@ -102,5 +103,28 @@ describe("core entry point on the server", () => {
     expect(html).toContain('aria-label="Chat history"');
     expect(html).toContain("hi");
     expect(html).toContain("hello");
+  });
+
+  it("server-renders MessageComposer without throwing or needing Buefy", async () => {
+    const { MessageComposer } = await import("../src/index.js");
+    const html = await renderToString(
+      createSSRApp(MessageComposer, {
+        modelValue: "draft",
+        placeholder: "Write a message",
+        textareaAriaLabel: "Message body",
+        submitAriaLabel: "Send",
+        ariaLabel: "Composer",
+      }),
+    );
+    expect(html).toContain("tr-message-composer");
+    expect(html).toContain("tr-message-composer__textarea");
+    expect(html).toContain("tr-message-composer__submit");
+    expect(html).toContain('aria-label="Composer"');
+    expect(html).toContain('aria-label="Message body"');
+    expect(html).toContain('aria-label="Send"');
+    expect(html).toContain("draft");
+    // The empty placeholder text is consumer-owned — without it the
+    // placeholder attribute simply isn't set.
+    expect(html).toContain('placeholder="Write a message"');
   });
 });
