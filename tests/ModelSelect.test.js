@@ -976,7 +976,7 @@ describe("ModelSelect — free-form BYOK action", () => {
     // Regression: validation must reject invalid ids even when the
     // consumer does not supply `freeformErrorLabel`. Validity is a
     // package invariant; the visible text is the only thing the
-    // consumer copy gates.
+    // consumer copy gates, and the package ships no built-in copy.
     describe("without freeformErrorLabel", () => {
         for (const props of [{ mode: "byok" }, { mode: "both", useOwnApiKey: true }]) {
             it(`still disables the action for an id with whitespace (${props.mode})`, async () => {
@@ -994,6 +994,11 @@ describe("ModelSelect — free-form BYOK action", () => {
                 const action = wrapper.find(".tr-model-select__freeform-action");
                 expect(action.exists()).toBe(true);
                 expect(action.attributes("disabled")).toBeDefined();
+                // The package itself ships no built-in error text — both
+                // the action's `title` attribute and the visible hint
+                // slot fall back to the empty string in this configuration.
+                expect(action.attributes("title")).toBe("");
+                expect(wrapper.find(".tr-model-select__freeform-hint").exists()).toBe(false);
                 // Pressing Enter must NOT commit a new providerModelId.
                 await pressEnter(wrapper);
                 expect(wrapper.emitted("update:providerModelId")).toBeUndefined();
@@ -1017,6 +1022,8 @@ describe("ModelSelect — free-form BYOK action", () => {
                 const action = wrapper.find(".tr-model-select__freeform-action");
                 expect(action.exists()).toBe(true);
                 expect(action.attributes("disabled")).toBeDefined();
+                expect(action.attributes("title")).toBe("");
+                expect(wrapper.find(".tr-model-select__freeform-hint").exists()).toBe(false);
                 await pressEnter(wrapper);
                 expect(wrapper.emitted("update:providerModelId")).toBeUndefined();
                 expect(wrapper.emitted("update:byokModelId")).toBeUndefined();

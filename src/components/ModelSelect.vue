@@ -238,12 +238,6 @@ import {
  */
 
 const FREEFORM_MAX_LENGTH = 255;
-// Built-in copy fallback for the free-form rule violation. The actual
-// validation rule (no whitespace, ≤ 255 characters) is a package
-// invariant — it never depends on consumer copy. The consumer-supplied
-// `freeformErrorLabel` replaces this fallback in the visible slot when
-// provided, but `freeformValid` must always enforce the rule itself.
-const FREEFORM_DEFAULT_ERROR = "Invalid identifier";
 
 const props = defineProps({
   /** @type {import("vue").PropType<"model" | "byok" | "both">} */
@@ -551,14 +545,15 @@ const freeformRuleViolated = computed(() => {
   return false;
 });
 
-// Visible error text shown next to the free-form action. Prefers the
-// consumer's `freeformErrorLabel`; falls back to a built-in invariant
-// string when the consumer did not provide one, so the user always sees
-// *something* explaining why the action is disabled. Validity never
-// reads this string — see `freeformValid`.
+// Visible error text shown next to the free-form action. The package
+// owns no built-in copy; the consumer-supplied `freeformErrorLabel` is
+// the only string surfaced, and it stays empty when the consumer did
+// not provide one — `freeformValid` enforces the rule independently,
+// so an invalid id is always rejected and the `<button disabled>` state
+// remains the primary signal even without a localised hint.
 const freeformError = computed(() => {
   if (!freeformRuleViolated.value) return "";
-  return props.freeformErrorLabel || FREEFORM_DEFAULT_ERROR;
+  return props.freeformErrorLabel || "";
 });
 
 const freeformValid = computed(() => {
