@@ -8,7 +8,7 @@
 // submit button fires the same emit, and the component never clears
 // the consumer's v-model itself. Auto-grow geometry and visual
 // contract are covered separately by task 3.
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 
@@ -69,9 +69,16 @@ describe("MessageComposer — controlled draft and submit guards", () => {
     });
 
     it("Enter does not emit submit while IME composition is active", async () => {
-        const wrapper = mountComposer({ modelValue: "" });
+        // Bind v-model so the typed draft flows back into `modelValue`;
+        // otherwise the draft stays empty and the IME guard is never the
+        // reason `submit` is suppressed.
+        const wrapper = mountComposer({
+            modelValue: "",
+            "onUpdate:modelValue": (value) => wrapper.setProps({ modelValue: value }),
+        });
         const ta = textarea(wrapper);
         await ta.setValue("にほん");
+        expect(wrapper.props("modelValue")).toBe("にほん");
         await ta.trigger("compositionstart");
         await ta.trigger("keydown", { key: "Enter" });
         expect(wrapper.emitted("submit")).toBeUndefined();
@@ -171,27 +178,60 @@ describe("MessageComposer — package boundary", () => {
 });
 
 describe("MessageComposer — auto-grow geometry (task 3)", () => {
-    it("resets the textarea height to 'auto' before measuring", async () => {
+    // `autosize` defers the measurement to `requestAnimationFrame`.
+    // Queue the callbacks and flush them explicitly so the tests do
+    // not depend on jsdom's frame timing.
+    let rafQueue;
+    beforeEach(() => {
+        rafQueue = [];
+        vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+            rafQueue.push(cb);
+            return rafQueue.length;
+        });
+        vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+    });
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    async function flushFrames() {
+        await nextTick();
+        const pending = rafQueue.splice(0);
+        pending.forEach((cb) => cb(0));
+    }
+
+    function stubScrollHeight(ta, value) {
+        Object.defineProperty(ta, "scrollHeight", { configurable: true, get: () => value });
+    }
+
+    it("measures on mount and resets the textarea height to 'auto' before reading scrollHeight", async () => {
         const wrapper = mountComposer({ modelValue: "hello" });
         const ta = wrapper.find("textarea").element;
-        // jsdom doesn't render text, so the natural scrollHeight is
-        // 0; the important contract is that the component clears the
-        // previous inline height before reading scrollHeight.
-        await nextTick();
-        expect(ta.style.height).toBe("0px");
+        // Record the inline height at the moment scrollHeight is read:
+        // without the `auto` reset, scrollHeight would be capped at the
+        // previous inline height and growth would be missed.
+        ta.style.height = "300px";
+        let heightAtRead = null;
+        Object.defineProperty(ta, "scrollHeight", {
+            configurable: true,
+            get: () => {
+                heightAtRead = ta.style.height;
+                return 30;
+            },
+        });
+        await flushFrames();
+        expect(heightAtRead).toBe("auto");
+        expect(ta.style.height).toBe("30px");
         wrapper.unmount();
     });
 
     it("writes the natural scrollHeight back as the new inline height", async () => {
         const wrapper = mountComposer({ modelValue: "hello" });
         const ta = wrapper.find("textarea").element;
-        // Stub scrollHeight to a known value and confirm it ends up
-        // on style.height (replacing the previous "auto").
-        Object.defineProperty(ta, "scrollHeight", { configurable: true, value: 42 });
+        await flushFrames();
+        stubScrollHeight(ta, 42);
         await wrapper.setProps({ modelValue: "hello world" });
-        await nextTick();
-        // requestAnimationFrame fires asynchronously; allow a microtask.
-        await new Promise((r) => setTimeout(r, 0));
+        await flushFrames();
         expect(ta.style.height).toBe("42px");
         wrapper.unmount();
     });
@@ -199,24 +239,20 @@ describe("MessageComposer — auto-grow geometry (task 3)", () => {
     it("resizes on every external modelValue change (controlled reset)", async () => {
         const wrapper = mountComposer({ modelValue: "hello" });
         const ta = wrapper.find("textarea").element;
-        Object.defineProperty(ta, "scrollHeight", { configurable: true, value: 18 });
-        await wrapper.setProps({ modelValue: "hello" });
-        await nextTick();
-        await new Promise((r) => setTimeout(r, 0));
+        stubScrollHeight(ta, 18);
+        await flushFrames();
         expect(ta.style.height).toBe("18px");
 
-        Object.defineProperty(ta, "scrollHeight", { configurable: true, value: 96 });
+        stubScrollHeight(ta, 96);
         await wrapper.setProps({ modelValue: "hello\nworld\nfoo\nbar\nbaz" });
-        await nextTick();
-        await new Promise((r) => setTimeout(r, 0));
+        await flushFrames();
         expect(ta.style.height).toBe("96px");
 
         // Clearing the draft shrinks the textarea back to the single-line
         // height the package stylesheet reserves.
-        Object.defineProperty(ta, "scrollHeight", { configurable: true, value: 18 });
+        stubScrollHeight(ta, 18);
         await wrapper.setProps({ modelValue: "" });
-        await nextTick();
-        await new Promise((r) => setTimeout(r, 0));
+        await flushFrames();
         expect(ta.style.height).toBe("18px");
         wrapper.unmount();
     });

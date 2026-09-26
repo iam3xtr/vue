@@ -103,7 +103,7 @@
  *
  * - The textarea always starts at one row tall (`rows="1"` plus the
  *   package's `.tr-message-composer__textarea` styles).
- * - On every input and on every external `modelValue` change the
+ * - On mount, on every input and on every external `modelValue` change the
  *   component resets the textarea height to `auto`, reads the natural
  *   `scrollHeight`, and sets `style.height` to that value.
  * - The package-level stylesheet caps the textarea at a documented
@@ -130,7 +130,7 @@
  * class names keep their rendering.
  */
 
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 const props = defineProps({
     modelValue: {
@@ -250,6 +250,10 @@ watch(
     },
     { immediate: false },
 );
+
+// Measure once on mount so an initial non-empty draft (restored or
+// prefilled by the consumer) gets its natural height immediately.
+onMounted(autosize);
 
 // `onInput` does not call `autosize` directly — the consumer's
 // `update:modelValue` propagates back into the watcher on the next
