@@ -83,26 +83,39 @@ describe("NavbarTabs", () => {
   }
 
   /**
-   * jsdom has no layout: fake a 100px viewport holding three 80px tabs laid
-   * out from `viewportLeft - scrollLeft`, and a working `scrollBy`.
+   * jsdom has no layout: fake a strip `viewportWidth` px wide holding
+   * `tabWidth` px tabs laid out from `viewportLeft - scrollLeft`, and a
+   * working `scrollBy`. Rendered arrows are `arrowWidth` px wide and narrow
+   * the viewport by that much each, as in the real flex layout.
+   * `setWidth` changes the strip width and fires a resize.
    */
-  function fakeLayout(wrapper, { viewportWidth = 100, tabWidth = 80 } = {}) {
+  function fakeLayout(wrapper, { viewportWidth = 100, tabWidth = 80, arrowWidth = 0 } = {}) {
     const viewport = wrapper.find(".tr-navbar-tabs__viewport").element;
+    let stripWidth = viewportWidth;
     let scrollLeft = 0;
     const links = () => wrapper.findAll(".tr-navbar-tabs__link").map((link) => link.element);
+    const arrows = () => Array.from(wrapper.element.querySelectorAll(".tr-navbar-tabs__arrow"));
     const contentWidth = () => links().length * tabWidth;
+    const clientWidth = () => {
+      const rendered = arrows();
+      rendered.forEach((arrow) => {
+        Object.defineProperty(arrow, "offsetWidth", { configurable: true, value: arrowWidth });
+      });
+      return stripWidth - rendered.length * arrowWidth;
+    };
+    const clamp = (value) => Math.min(Math.max(value, 0), Math.max(contentWidth() - clientWidth(), 0));
     Object.defineProperties(viewport, {
-      clientWidth: { configurable: true, get: () => viewportWidth },
-      scrollWidth: { configurable: true, get: () => Math.max(contentWidth(), viewportWidth) },
+      clientWidth: { configurable: true, get: clientWidth },
+      scrollWidth: { configurable: true, get: () => Math.max(contentWidth(), clientWidth()) },
       scrollLeft: {
         configurable: true,
         get: () => scrollLeft,
         set: (value) => {
-          scrollLeft = Math.min(Math.max(value, 0), Math.max(contentWidth() - viewportWidth, 0));
+          scrollLeft = clamp(value);
         },
       },
     });
-    viewport.getBoundingClientRect = () => rect(0, viewportWidth);
+    viewport.getBoundingClientRect = () => rect(0, clientWidth());
     viewport.scrollBy = vi.fn(({ left }) => {
       viewport.scrollLeft = scrollLeft + left;
       viewport.dispatchEvent(new Event("scroll"));
@@ -110,7 +123,13 @@ describe("NavbarTabs", () => {
     links().forEach((link, index) => {
       link.getBoundingClientRect = () => rect(index * tabWidth - scrollLeft, tabWidth);
     });
-    return viewport;
+    async function setWidth(width) {
+      stripWidth = width;
+      window.dispatchEvent(new Event("resize"));
+      await wrapper.vm.$nextTick();
+      await wrapper.vm.$nextTick();
+    }
+    return { viewport, setWidth };
   }
 
   async function mountTabs(props = {}, layout = {}) {
@@ -122,10 +141,12 @@ describe("NavbarTabs", () => {
       global: { plugins: [router] },
       attachTo: document.body,
     });
-    const viewport = fakeLayout(wrapper, layout);
+    const { viewport, setWidth } = fakeLayout(wrapper, layout);
     window.dispatchEvent(new Event("resize"));
     await wrapper.vm.$nextTick();
-    return { wrapper, router, viewport };
+    return {
+      wrapper, router, viewport, setWidth,
+    };
   }
 
   it("renders no arrows while every tab fits", async () => {
@@ -193,6 +214,75 @@ describe("NavbarTabs", () => {
     await router.push("/usage");
     await vi.waitFor(() => expect(viewport.scrollLeft).toBe(140));
     expect(wrapper.find('[aria-current="page"]').text()).toBe("Usage");
+    wrapper.unmount();
+  });
+
+  it("drops the arrows once the widened strip fits every tab, without oscillating", async () => {
+    // Three 80px tabs (240px) and two 20px arrows.
+    const { wrapper, setWidth } = await mountTabs({}, { viewportWidth: 230, arrowWidth: 20 });
+    expect(wrapper.classes()).toContain("is-overflowing");
+    expect(wrapper.findAll(".tr-navbar-tabs__arrow")).toHaveLength(2);
+
+    // 250px fits all tabs only when the arrows' 40px is counted back in.
+    await setWidth(250);
+    expect(wrapper.classes()).not.toContain("is-overflowing");
+    expect(wrapper.find(".tr-navbar-tabs__arrow").exists()).toBe(false);
+
+    // Further measurements at the same width must not bring the arrows back.
+    await setWidth(250);
+    await setWidth(250);
+    expect(wrapper.classes()).not.toContain("is-overflowing");
+    expect(wrapper.find(".tr-navbar-tabs__arrow").exists()).toBe(false);
+
+    await setWidth(230);
+    expect(wrapper.classes()).toContain("is-overflowing");
+    await setWidth(230);
+    expect(wrapper.classes()).toContain("is-overflowing");
+    expect(wrapper.findAll(".tr-navbar-tabs__arrow")).toHaveLength(2);
+    wrapper.unmount();
+  });
+
+  it("reveals the active tab when a resize makes the strip overflow", async () => {
+    const { wrapper, router, viewport, setWidth } = await mountTabs({}, { viewportWidth: 400 });
+    await router.push("/usage");
+    await wrapper.vm.$nextTick();
+    expect(viewport.scrollLeft).toBe(0);
+
+    await setWidth(100);
+    expect(wrapper.classes()).toContain("is-overflowing");
+    // Usage spans 160–240: its end is aligned with the 100px viewport.
+    await vi.waitFor(() => expect(viewport.scrollLeft).toBe(140));
+    wrapper.unmount();
+  });
+
+  it("re-reveals the active tab when an overflowing strip changes width, not on a pure scroll", async () => {
+    const { wrapper, router, viewport, setWidth } = await mountTabs();
+    await router.push("/usage");
+    await vi.waitFor(() => expect(viewport.scrollLeft).toBe(140));
+
+    // A scroll or a resize event with an unchanged width keeps the position.
+    viewport.scrollLeft = 0;
+    viewport.dispatchEvent(new Event("scroll"));
+    await setWidth(100);
+    expect(viewport.scrollLeft).toBe(0);
+
+    await setWidth(120);
+    expect(wrapper.classes()).toContain("is-overflowing");
+    expect(viewport.scrollLeft).toBe(120);
+    wrapper.unmount();
+  });
+
+  it("re-measures overflow when items change", async () => {
+    const { wrapper } = await mountTabs({}, { viewportWidth: 300 });
+    expect(wrapper.classes()).not.toContain("is-overflowing");
+
+    await wrapper.setProps({ items: [...tabItems, { label: "Billing", to: { name: "plans" } }] });
+    await vi.waitFor(() => expect(wrapper.classes()).toContain("is-overflowing"));
+    expect(wrapper.findAll(".tr-navbar-tabs__arrow")).toHaveLength(2);
+
+    await wrapper.setProps({ items: tabItems.slice(0, 2) });
+    await vi.waitFor(() => expect(wrapper.classes()).not.toContain("is-overflowing"));
+    expect(wrapper.find(".tr-navbar-tabs__arrow").exists()).toBe(false);
     wrapper.unmount();
   });
 
