@@ -167,6 +167,27 @@ describe("NavbarTabs", () => {
     wrapper.unmount();
   });
 
+  it("moves focus to the opposite arrow when the focused arrow becomes disabled", async () => {
+    const { wrapper } = await mountTabs();
+    const next = wrapper.find(".tr-navbar-tabs__arrow--next");
+    const prev = wrapper.find(".tr-navbar-tabs__arrow--prev");
+
+    next.element.focus();
+    await next.trigger("click");
+    expect(document.activeElement).toBe(next.element);
+    await next.trigger("click");
+    await wrapper.vm.$nextTick();
+    expect(next.element.disabled).toBe(true);
+    expect(document.activeElement).toBe(prev.element);
+
+    await prev.trigger("click");
+    await prev.trigger("click");
+    await wrapper.vm.$nextTick();
+    expect(prev.element.disabled).toBe(true);
+    expect(document.activeElement).toBe(next.element);
+    wrapper.unmount();
+  });
+
   it("keeps the active tab visible after a route change", async () => {
     const { wrapper, router, viewport } = await mountTabs();
     await router.push("/usage");

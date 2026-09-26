@@ -7,6 +7,7 @@
   >
     <button
       v-if="isOverflowing"
+      ref="prevArrowRef"
       class="tr-navbar-tabs__arrow tr-navbar-tabs__arrow--prev"
       type="button"
       :aria-label="prevLabel"
@@ -38,6 +39,7 @@
 
     <button
       v-if="isOverflowing"
+      ref="nextArrowRef"
       class="tr-navbar-tabs__arrow tr-navbar-tabs__arrow--next"
       type="button"
       :aria-label="nextLabel"
@@ -120,6 +122,8 @@ const route = useRoute();
 const rootRef = ref(null);
 const viewportRef = ref(null);
 const trackRef = ref(null);
+const prevArrowRef = ref(null);
+const nextArrowRef = ref(null);
 const isOverflowing = ref(false);
 const canScrollPrev = ref(false);
 const canScrollNext = ref(false);
@@ -252,6 +256,26 @@ async function remeasureAndReveal() {
   revealActive();
 }
 
+/**
+ * A focused arrow that becomes disabled (e.g. repeated Enter on "next" until
+ * the end) would drop focus to `<body>`. Hand focus to the opposite arrow so
+ * keyboard users stay inside the strip. The watcher runs before the DOM
+ * patch, while the arrow still holds focus.
+ */
+function keepArrowFocus(arrowRef, oppositeRef) {
+  return (enabled) => {
+    const arrow = arrowRef.value;
+    if (enabled || !arrow || typeof document === "undefined") return;
+    if (document.activeElement !== arrow) return;
+    nextTick(() => {
+      const opposite = oppositeRef.value;
+      if (opposite && !opposite.disabled) opposite.focus();
+    });
+  };
+}
+
+watch(canScrollPrev, keepArrowFocus(prevArrowRef, nextArrowRef));
+watch(canScrollNext, keepArrowFocus(nextArrowRef, prevArrowRef));
 watch(() => route?.fullPath, remeasureAndReveal);
 watch(() => props.items, remeasureAndReveal, { deep: true });
 
