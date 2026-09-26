@@ -31,6 +31,20 @@ describe("ChatHistory — default body", () => {
         expect(rendered[0].find(".tr-chat-history__text").exists()).toBe(true);
     });
 
+    it("renders HTML-like text as literal text, never as markup", () => {
+        const payload = "<b>x</b><img src=x onerror=1>";
+        const wrapper = mount(ChatHistory, {
+            props: { messages: [{ id: "x1", text: payload, outgoing: false }] },
+        });
+        const text = wrapper.find(".tr-chat-history__text");
+        expect(text.find("b").exists()).toBe(false);
+        expect(text.find("img").exists()).toBe(false);
+        expect(wrapper.find(".tr-chat-history img").exists()).toBe(false);
+        expect(text.element.children).toHaveLength(0);
+        expect(text.element.textContent).toBe(payload);
+        wrapper.unmount();
+    });
+
     it("marks outgoing messages with the dedicated class", () => {
         const wrapper = mount(ChatHistory, { props: { messages } });
         const rendered = wrapper.findAll(".tr-chat-history__message");
@@ -72,6 +86,34 @@ describe("ChatHistory — default body", () => {
             "Hi back",
             "Multi-line\nmessage",
         ]);
+    });
+
+    it("keeps the same DOM element for the same id across prepend and reorder", async () => {
+        const wrapper = mount(ChatHistory, { props: { messages } });
+        const byText = () =>
+            Object.fromEntries(
+                wrapper.findAll(".tr-chat-history__message").map((node) => [node.text(), node.element]),
+            );
+        const before = byText();
+
+        // Prepend an older message (history pagination).
+        await wrapper.setProps({
+            messages: [{ id: "m0", text: "Older", outgoing: false }, ...messages],
+        });
+        const afterPrepend = byText();
+        expect(Object.keys(afterPrepend)).toEqual(["Older", "Hello there", "Hi back", "Multi-line\nmessage"]);
+        expect(afterPrepend["Hello there"]).toBe(before["Hello there"]);
+        expect(afterPrepend["Hi back"]).toBe(before["Hi back"]);
+        expect(afterPrepend["Multi-line\nmessage"]).toBe(before["Multi-line\nmessage"]);
+
+        // Reorder the existing messages.
+        await wrapper.setProps({ messages: [messages[2], messages[0], messages[1]] });
+        const rendered = wrapper.findAll(".tr-chat-history__message");
+        expect(rendered.map((node) => node.text())).toEqual(["Multi-line\nmessage", "Hello there", "Hi back"]);
+        expect(rendered[0].element).toBe(before["Multi-line\nmessage"]);
+        expect(rendered[1].element).toBe(before["Hello there"]);
+        expect(rendered[2].element).toBe(before["Hi back"]);
+        wrapper.unmount();
     });
 
     it("does not mutate the messages array on mount or render", () => {

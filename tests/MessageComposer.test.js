@@ -149,6 +149,34 @@ describe("MessageComposer — controlled draft and submit guards", () => {
         wrapper.unmount();
     });
 
+    it("two Enter presses emit two submits (no one-shot latch)", async () => {
+        const wrapper = mountComposer({ modelValue: "again" });
+        await textarea(wrapper).trigger("keydown", { key: "Enter" });
+        await textarea(wrapper).trigger("keydown", { key: "Enter" });
+        expect(wrapper.emitted("submit")).toEqual([["again"], ["again"]]);
+        wrapper.unmount();
+    });
+
+    it("switching to busy via setProps blocks Enter, click and form submit", async () => {
+        const wrapper = mountComposer({ modelValue: "hi" });
+        await textarea(wrapper).trigger("keydown", { key: "Enter" });
+        expect(wrapper.emitted("submit")).toEqual([["hi"]]);
+
+        await wrapper.setProps({ busy: true });
+        expect(textarea(wrapper).attributes("aria-busy")).toBe("true");
+        expect(submitButton(wrapper).attributes("disabled")).toBeDefined();
+        await textarea(wrapper).trigger("keydown", { key: "Enter" });
+        await submitButton(wrapper).trigger("click");
+        // Bypass the disabled button: the form submit path is gated too.
+        await wrapper.find("form.tr-message-composer").trigger("submit");
+        expect(wrapper.emitted("submit")).toEqual([["hi"]]);
+
+        await wrapper.setProps({ busy: false });
+        await submitButton(wrapper).trigger("click");
+        expect(wrapper.emitted("submit")).toEqual([["hi"], ["hi"]]);
+        wrapper.unmount();
+    });
+
     it("does not mutate the consumer's modelValue on submit (controlled draft)", async () => {
         const wrapper = mountComposer({ modelValue: "draft text" });
         await submitButton(wrapper).trigger("click");
