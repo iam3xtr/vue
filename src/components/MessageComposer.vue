@@ -105,7 +105,8 @@
  *   package's `.tr-message-composer__textarea` styles).
  * - On mount, on every input and on every external `modelValue` change the
  *   component resets the textarea height to `auto`, reads the natural
- *   `scrollHeight`, and sets `style.height` to that value.
+ *   `scrollHeight`, and sets `style.height` to that value plus the
+ *   textarea's vertical border (the theme sizes it as `border-box`).
  * - The package-level stylesheet caps the textarea at a documented
  *   `max-height` (the 100px visual reference from `chat.3xtr.im`); once
  *   the natural height reaches the cap the textarea falls back to
@@ -236,7 +237,13 @@ function applyAutosize() {
     const ta = textareaRef.value;
     if (!ta) return;
     ta.style.height = "auto";
-    ta.style.height = `${ta.scrollHeight}px`;
+    // `scrollHeight` excludes the borders, while the package theme sizes
+    // the textarea as `border-box`. Add the border (offsetHeight minus
+    // clientHeight) back, otherwise the box ends up a couple of pixels
+    // shorter than its content and shows a scrollbar from the second
+    // line on instead of only at the max-height cap.
+    const frame = ta.offsetHeight - ta.clientHeight;
+    ta.style.height = `${ta.scrollHeight + frame}px`;
 }
 
 watch(

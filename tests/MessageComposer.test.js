@@ -257,19 +257,20 @@ describe("MessageComposer — auto-grow geometry (task 3)", () => {
         wrapper.unmount();
     });
 
-    it("caps at the package's max-height (100px) once scrollHeight exceeds it; the textarea scrolls inside instead", () => {
-        // The CSS contract is owned by `@iam3xtr/ui`'s
-        // `.tr-message-composer__textarea` rule: `max-height: 100px;
-        // overflow-y: auto;`. Unit-level jsdom cannot render the
-        // computed style reliably, so this test pins the source-side
-        // rules instead.
-        const fs = require("node:fs");
-        const path = require("node:path");
-        const themePath = path.resolve(__dirname, "../../ui/src/styles/theme.scss");
-        const src = fs.readFileSync(themePath, "utf8");
-        const block = src.match(/\.tr-message-composer__textarea\s*\{([\s\S]*?)\}/)?.[1] ?? "";
-        expect(block).toMatch(/max-height:\s*100px/);
-        expect(block).toMatch(/overflow-y:\s*auto/);
-        expect(block).toMatch(/resize:\s*none/);
+    it("adds the border-box frame (offsetHeight - clientHeight) so a fitting draft never shows a scrollbar", async () => {
+        // The package theme sizes the textarea as `border-box`, while
+        // `scrollHeight` excludes borders. Writing `scrollHeight` alone
+        // leaves the box 2px short of its content and scrolls from the
+        // second line on. The max-height / overflow-y cap itself is a
+        // `@iam3xtr/ui` style contract pinned in that package's tests.
+        const wrapper = mountComposer({ modelValue: "hello" });
+        const ta = wrapper.find("textarea").element;
+        Object.defineProperty(ta, "offsetHeight", { configurable: true, get: () => 42 });
+        Object.defineProperty(ta, "clientHeight", { configurable: true, get: () => 40 });
+        stubScrollHeight(ta, 40);
+        await wrapper.setProps({ modelValue: "hello world" });
+        await flushFrames();
+        expect(ta.style.height).toBe("42px");
+        wrapper.unmount();
     });
 });
