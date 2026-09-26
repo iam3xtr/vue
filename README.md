@@ -15,7 +15,7 @@ product-specific URL. Всё это остаётся в каждом потре�
 ```js
 import { Icon, Loader, AsyncState, ListAsyncState, CopyPre, Toolbar, ToolbarDropdown,
          ToolbarSearch, MobileFilters, NavbarMenu, FileDropTarget, FormDrawer,
-         ModelSelect,
+         ModelSelect, ChatHistory, MessageComposer,
          iconRegistryKey, provideIconRegistry, navbarMenuKey, useFocusTrap,
          useDropdownOverlay, resolveDropdownPlacement, POSITIONS,
          DROPDOWN_OVERLAY_MARKER } from "@iam3xtr/vue";
@@ -106,6 +106,8 @@ navigation-компонент как глобальный, под фиксиро
 | `tr-file-drop-target` | `FileDropTarget` |
 | `tr-form-drawer` | `FormDrawer` |
 | `tr-model-select` | `ModelSelect` |
+| `tr-chat-history` | `ChatHistory` |
+| `tr-message-composer` | `MessageComposer` |
 | `tr-page-header` | `PageHeader` (`./navigation`) |
 | `tr-navbar-tabs` | `NavbarTabs` (`./navigation`) |
 | `tr-tariff-summary-card` | `TariffSummaryCard` (`./navigation`) |
@@ -143,6 +145,28 @@ default-реестр без этого шага (см. "Реестр иконо�
 | `FileDropTarget` | `disabled`, `multiple` (по умолчанию `true`), `accept` (расширения/MIME/`image/*`, только клиентская подсказка), `overlayLabel` (по умолчанию `"Отпустите файлы, чтобы загрузить"`) | `files` (`File[]`, только на реальном drop файлов) | default | — |
 | `FormDrawer` | `v-model` (обязателен, open state), `title`, `busy`, `disabled`, `closeAriaLabel` (по умолчанию `"Закрыть"`) | `update:modelValue`, `submit` (не эмитится во время `busy`/`disabled`) | default (form body, scoped `{ busy, disabled }`), `footer` (actions, тот же scope) | Buefy (`b-sidebar`, `b-icon`) |
 | `ModelSelect` | `mode` (`"model"` / `"byok"` / `"both"`), `models` (обязателен, `[{id,name,provider?}]`), `recommendedModels`, `searchResults`, `loading`, `error`, `invalid`, `disabled`, `inputId`, `triggerPlaceholder`, `searchPlaceholder`, `triggerAriaLabel`, `searchAriaLabel`, `triggerTitle`, `emptyLabel`, `loadingLabel`, `errorLabel`, `switchLabel` / `switchAriaLabel` (только `mode === "both"`), `freeformActionLabel` / `freeformActionAriaLabel` / `freeformHint` / `freeformErrorLabel` (BYOK scope); `v-model:modelId`, `v-model:byokModelId`, `v-model:providerModelId`, `v-model:useOwnApiKey` (только `mode === "both"`) | `update:modelId`, `update:byokModelId`, `update:providerModelId`, `update:useOwnApiKey`, `update:query` | `byok-key` (consumer-owned UI ключа; пакет не читает и не хранит значение) | Buefy (`b-dropdown`, `b-button`, `b-autocomplete`) |
+| `ChatHistory` | `messages` (обязателен, `[{id,text,outgoing}]`), `ariaLabel`, `ariaLive` (по умолчанию `"polite"`) | — | `body`, `metadata`, `status` (scoped `{ message }`), `empty` | `@iam3xtr/ui` theme |
+| `MessageComposer` | `v-model` (`modelValue`), `disabled`, `busy`, `placeholder`, `ariaLabel`, `textareaAriaLabel`, `submitAriaLabel` | `update:modelValue`, `submit` (trimmed непустая строка) | `submit-icon` | `@iam3xtr/ui` theme |
+
+### ChatHistory и MessageComposer
+
+`ChatHistory` выводит входной массив в заданном порядке с ключами по стабильным
+`id`. Без `body` slot поле `text` отображается как экранированный текст;
+`outgoing` определяет сторону сообщения. `metadata` и `status` получают
+исходное сообщение, поэтому время, доставка и retry остаются за consumer.
+Пустое состояние заполняется через `empty` slot; пакет не добавляет текст.
+
+`MessageComposer` принимает управляемый draft через `v-model`. Ввод эмитит
+`update:modelValue`, а Enter без Shift и кнопка отправки эмитят `submit` с
+непустым trimmed текстом только при `!disabled && !busy` и вне IME composition.
+Shift+Enter добавляет новую строку. `submit` не очищает draft: consumer
+сбрасывает модель после успешной отправки и сохраняет её при отказе.
+Передавайте локализованные `placeholder`, `textareaAriaLabel` и
+`submitAriaLabel`; пакет не содержит видимых строк. Textarea начинается
+с высоты кнопки, растёт до 100 px и затем прокручивается внутри. В bounded
+flex-column history занимает доступное пространство и прокручивается отдельно.
+Стили находятся в `@iam3xtr/ui` под новыми `tr-chat-history*` и
+`tr-message-composer*` selectors; старые chat selectors сохраняются.
 
 `ToolbarDropdown` и `MobileFilters` используют общий overlay: открытое меню
 перекрывает следующий контент и меняет направление у края viewport. Если
