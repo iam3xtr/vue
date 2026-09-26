@@ -93,7 +93,10 @@
  * - IME composition (`compositionstart` → `compositionend`) is ignored
  *   while active so an in-progress CJK or other IME composition never
  *   fires `submit`, even if the user hits Enter to confirm the IME
- *   candidate.
+ *   candidate. The Enter `keydown` is also ignored (no `submit`, no
+ *   `preventDefault`) when it reports `isComposing` or the IME-processed
+ *   `keyCode === 229`; the latter covers Safari/WebKit, which fires
+ *   `compositionend` before the candidate-confirming Enter `keydown`.
  * - Mobile and desktop both expose a visible submit button so Enter is
  *   not the only path — the mobile keyboard's Enter often changes layout
  *   instead of submitting, and the explicit button stays available with
@@ -188,7 +191,13 @@ function emitSubmit() {
 
 function onKeydown(event) {
     if (event.key !== "Enter") return;
-    if (event.isComposing) return;
+    // IME guard. `isComposing` covers Chromium/Firefox. Safari/WebKit
+    // fires `compositionend` *before* the keydown of the Enter that
+    // confirms the IME candidate, so that keydown reports
+    // `isComposing === false`; it still carries the IME-processed
+    // `keyCode === 229`. Leave such keystrokes to the IME (no submit,
+    // no preventDefault).
+    if (event.isComposing || event.keyCode === 229) return;
     if (event.shiftKey) return;
     // Suppress the browser's native newline insertion: with our contract
     // a single Enter is a submit, not a newline, on both desktop and

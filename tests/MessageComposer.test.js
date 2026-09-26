@@ -88,6 +88,35 @@ describe("MessageComposer — controlled draft and submit guards", () => {
         wrapper.unmount();
     });
 
+    it("ignores the Safari/WebKit IME-confirm Enter that arrives after compositionend (keyCode 229)", async () => {
+        // WebKit fires `compositionend` before the `keydown` of the Enter
+        // that confirms the IME candidate; that keydown reports
+        // `isComposing === false` but `keyCode === 229`.
+        const wrapper = mountComposer({
+            modelValue: "",
+            "onUpdate:modelValue": (value) => wrapper.setProps({ modelValue: value }),
+        });
+        const ta = textarea(wrapper);
+        await ta.setValue("にほん");
+        await ta.trigger("compositionstart");
+        await ta.trigger("compositionend");
+        const imeEnter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+        Object.defineProperty(imeEnter, "keyCode", { value: 229 });
+        ta.element.dispatchEvent(imeEnter);
+        await nextTick();
+        expect(wrapper.emitted("submit")).toBeUndefined();
+        // The IME owns this keystroke; the composer must not cancel it.
+        expect(imeEnter.defaultPrevented).toBe(false);
+
+        const plainEnter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+        Object.defineProperty(plainEnter, "keyCode", { value: 13 });
+        ta.element.dispatchEvent(plainEnter);
+        await nextTick();
+        expect(wrapper.emitted("submit")).toEqual([["にほん"]]);
+        expect(plainEnter.defaultPrevented).toBe(true);
+        wrapper.unmount();
+    });
+
     it("Enter does not emit submit while disabled", async () => {
         const wrapper = mountComposer({ modelValue: "hi", disabled: true });
         await textarea(wrapper).trigger("keydown", { key: "Enter" });
