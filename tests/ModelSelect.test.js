@@ -79,6 +79,14 @@ function optionState(wrapper) {
 }
 
 describe("ModelSelect — mode=model (catalog)", () => {
+    it("anchors the menu at the trigger's left edge in every mode", () => {
+        for (const mode of ["model", "byok", "both"]) {
+            const wrapper = mountModel({ mode, models });
+            expect(wrapper.classes()).toContain("is-bottom-right");
+            wrapper.unmount();
+        }
+    });
+
     it("displays the canonical name of v-model:modelId on the closed trigger", () => {
         const wrapper = mountModel({
             models,

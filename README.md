@@ -314,7 +314,7 @@ BYOK-каталог + свободный BYOK identifier (`mode === "byok"`) и
 `b-dropdown` на общем overlay (`useDropdownOverlay`, см. выше): search
 row и результаты остаются в одном popup, внутренний `b-autocomplete`
 не создаёт второй body-portal и не выбирает своё направление; Buefy
-сохраняет keyboard/focus/close и layering в modal/drawer.
+сохраняет keyboard/focus/close и layering в modal/drawer. Popup выровнен по левому краю trigger и при необходимости раскрывается вверх.
 
 #### Адаптация production-формы
 

@@ -654,7 +654,7 @@ function refreshRefs() {
     ?? null;
 }
 
-const positionRef = ref(/** @type {(typeof POSITIONS)[number]} */ ("is-bottom-left"));
+const positionRef = ref(/** @type {(typeof POSITIONS)[number]} */ ("is-bottom-right"));
 
 const placement = ref(/** @type {"inline"|"fixed"|"portal"} */ ("inline"));
 const appendToBody = computed(() => placement.value === "portal");
