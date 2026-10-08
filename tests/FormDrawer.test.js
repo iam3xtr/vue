@@ -510,4 +510,27 @@ describe("FormDrawer", () => {
       expect(wrapper.emitted("update:modelValue")).toEqual([[false]]);
     });
   });
+
+  describe("width", () => {
+    // Earlier tests may leave drawers in <body>; the newest one is last.
+    const sidebarRoot = () => [...document.body.querySelectorAll(".tr-form-drawer")].at(-1);
+
+    it("sets --tr-form-drawer-width on the drawer root when width is given", () => {
+      const wrapper = mountDrawer({
+        attachTo: document.body,
+        props: { modelValue: true, width: "42rem" },
+      });
+      expect(sidebarRoot().style.getPropertyValue("--tr-form-drawer-width")).toBe("42rem");
+      wrapper.unmount();
+    });
+
+    it("leaves the property unset by default so the theme's 420px applies", () => {
+      const wrapper = mountDrawer({
+        attachTo: document.body,
+        props: { modelValue: true },
+      });
+      expect(sidebarRoot().style.getPropertyValue("--tr-form-drawer-width")).toBe("");
+      wrapper.unmount();
+    });
+  });
 });

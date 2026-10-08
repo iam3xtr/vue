@@ -7,6 +7,7 @@
     overlay
     fullheight
     :can-cancel="false"
+    :style="width ? { '--tr-form-drawer-width': width } : undefined"
   >
     <component
       :is="shell ? 'div' : 'form'"
@@ -145,6 +146,13 @@ import { useFocusTrap } from "../composables/useFocusTrap.js";
  * close guard. Native mode is unchanged. The package does not depend on
  * vee-validate; all copy and accessible names come from the consumer.
  *
+ * Width: `width` (String, optional — any CSS length such as `"42rem"`) sets
+ * the panel width through the `--tr-form-drawer-width` custom property that
+ * the `@iam3xtr/ui` theme consumes; no consumer CSS override is needed.
+ * Without it the default is `420px`. The theme always clamps the panel to the
+ * viewport (`100vw`), so on a narrow screen it is full width regardless of
+ * the requested value. Header and footer stay fixed; only the body scrolls.
+ *
  * Requires Buefy (`b-sidebar`, `b-icon`).
  */
 const props = defineProps({
@@ -171,6 +179,10 @@ const props = defineProps({
   shell: {
     type: Boolean,
     default: false,
+  },
+  width: {
+    type: String,
+    default: null,
   },
   closeAriaLabel: {
     type: String,
