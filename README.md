@@ -143,7 +143,7 @@ default-реестр без этого шага (см. "Реестр иконо�
 | `MobileFilters` | `active`, `triggerAriaLabel` (по умолчанию `"Открыть фильтры"`), `triggerTitle` (по умолчанию `"Фильтры"`) | — | default | Buefy (`b-dropdown`, `b-button`) |
 | `NavbarMenu` | — (читает injection `navbarMenuKey`) | — | default | — |
 | `FileDropTarget` | `disabled`, `multiple` (по умолчанию `true`), `accept` (расширения/MIME/`image/*`, только клиентская подсказка), `overlayLabel` (по умолчанию `"Отпустите файлы, чтобы загрузить"`) | `files` (`File[]`, только на реальном drop файлов) | default | — |
-| `FormDrawer` | `v-model` (обязателен, open state), `title`, `busy`, `disabled`, `closeAriaLabel` (по умолчанию `"Закрыть"`) | `update:modelValue`, `submit` (не эмитится во время `busy`/`disabled`) | default (form body, scoped `{ busy, disabled }`), `footer` (actions, тот же scope) | Buefy (`b-sidebar`, `b-icon`) |
+| `FormDrawer` | `v-model`, `title`, `busy`, `disabled`, `closeAriaLabel`, `beforeClose`, `shell`, `width` | `update:modelValue`, native `submit` | default, `footer`, `shell`; scoped `requestClose` | Buefy (`b-sidebar`, `b-icon`) |
 | `ModelSelect` | `mode` (`"model"` / `"byok"` / `"both"`), `models` (обязателен, `[{id,name,provider?}]`), `recommendedModels`, `searchResults`, `loading`, `error`, `invalid`, `disabled`, `inputId`, `triggerPlaceholder`, `searchPlaceholder`, `triggerAriaLabel`, `searchAriaLabel`, `triggerTitle`, `emptyLabel`, `loadingLabel`, `errorLabel`, `switchLabel` / `switchAriaLabel` (только `mode === "both"`), `freeformActionLabel` / `freeformActionAriaLabel` / `freeformHint` / `freeformErrorLabel` (BYOK scope); `v-model:modelId`, `v-model:byokModelId`, `v-model:providerModelId`, `v-model:useOwnApiKey` (только `mode === "both"`) | `update:modelId`, `update:byokModelId`, `update:providerModelId`, `update:useOwnApiKey`, `update:query` | `byok-key` (consumer-owned UI ключа; пакет не читает и не хранит значение) | Buefy (`b-dropdown`, `b-button`, `b-autocomplete`) |
 | `ChatHistory` | `messages` (обязателен, `[{id,text,outgoing}]`), `ariaLabel`, `ariaLive` (по умолчанию `"polite"`) | — | `body`, `metadata`, `status` (scoped `{ message }`), `empty` | `@iam3xtr/ui` theme |
 | `MessageComposer` | `v-model` (`modelValue`), `disabled`, `busy`, `placeholder`, `ariaLabel`, `textareaAriaLabel`, `submitAriaLabel` | `update:modelValue`, `submit` (trimmed непустая строка) | `submit-icon` | `@iam3xtr/ui` theme |
@@ -212,20 +212,33 @@ click/focus/сортировка/dropdown дочернего контента н
 upload, progress, retry, cancel или API — эмитит один `files` `File[]` и
 больше ничего не делает.
 
-`FormDrawer` — единый каркас правой формы поверх штатного `b-sidebar`
-(`right`, `overlay`, `fullheight`), а не самодельный overlay: Escape, клик
-по backdrop и scroll lock остаются контрактом Buefy. Header содержит
-`title` и доступную close-кнопку (`closeAriaLabel`); default slot — form
-body, который скроллится независимо; `footer` slot — действия, остающиеся
-видимыми под длинным body. Native `<form>` submit эмитит `submit` не более
-одного раза за клик/Enter и не эмитит его вовсе, пока `busy` или `disabled`
-— компонент не делает `preventDefault`-валидацию, не читает `FormData` и не
-знает про draft/API. Оба slot получают `busy`/`disabled` scoped-пропами для
-удобной привязки состояния кнопки в `footer`. Явное ограничение Buefy:
-`b-sidebar`, в отличие от `b-modal`, не реализует focus trap и возврат
-фокуса на triggering элемент при закрытии — `FormDrawer` не подменяет это
-собственной реализацией; консьюмеру, которому нужен focus trap/return для
-конкретного экрана, доступен `useFocusTrap` из этого же пакета.
+### FormDrawer: guard, фокус и внешняя форма
+
+Контракт ниже реализован в package sources; опубликованная пара 0.1.3 ещё не содержит этих расширений. Для registry-потребителя сначала требуется новый выпуск.
+
+Панель использует Buefy Sidebar для поверхности и scroll lock. Каждый пользовательский запрос закрытия — Escape, собственный backdrop, header close или публичный `requestClose(reason?)` через ref/scoped slot — проходит `beforeClose(reason)`. Причины: `escape`, `backdrop`, `close-button`, `programmatic`. Callback может вернуть boolean/Promise; только false, throw или rejection отклоняют запрос. Пока callback ожидается, повторные запросы объединяются; draft и видимость сохраняются. Изменение `modelValue` родителем не проходит guard; устаревший результат после close/reopen/unmount игнорируется. `busy` и `disabled` блокируют native submit, но не закрытие: запрет при загрузке задаёт consumer в guard.
+
+Фокус входит в панель при открытии, Tab/Shift+Tab удерживаются внутри, после фактического закрытия фокус возвращается к существующему trigger. Внешний Buefy modal/sidebar/dropdown overlay, получивший фокус, обслуживает собственную клавиатуру. `useFocusTrap` поддерживает opt-in `immediate` и `contain`; прежние значения по умолчанию сохранены. Вложенные Buefy overlays независимо снимают scroll lock: общий host должен сохранять его, пока нижняя панель открыта. Рабочий пример в UI Kit восстанавливает `html.is-clipped` после закрытия dirty confirmation; это не глобальный lock manager пакета.
+
+Native режим по умолчанию сохраняет один HTML form и событие `submit`, подавляемое при busy/disabled. `shell` включает оболочку для consumer-owned формы (например, vee-validate): package form отсутствует, событие submit пакета не эмитится. Slot `shell` получает `content` — компонент body/footer — и `busy`, `disabled`, `requestClose`. Default/footer slots сохраняются и получают тот же scope. Внешняя форма должна быть прямым ребёнком shell slot; дополнительная обёртка нарушит flex/scroll layout. Validation, блокировка submit в shell, dirty state и API принадлежат consumer. Пакет не зависит от vee-validate.
+
+`width` — CSS length, например `42rem`, передаваемый через `--tr-form-drawer-width`. По умолчанию 420px; тема ограничивает ширину viewport и сохраняет mobile fullscreen. Body прокручивается отдельно от header/footer. Передавайте локализованный `closeAriaLabel`; старый default сохранён для совместимости.
+
+Пример шаблона (`Form` импортируется consumer из vee-validate, `FormDrawer` — из `@iam3xtr/vue`):
+
+```vue
+<FormDrawer v-model="open" shell width="42rem" :before-close="beforeClose"
+  :close-aria-label="copy.close">
+  <template #shell="{ content }">
+    <Form @submit="save"><component :is="content" /></Form>
+  </template>
+  <Field name="name" :rules="required" />
+  <template #footer="{ requestClose }">
+    <button type="button" @click="requestClose()">{{ copy.cancel }}</button>
+    <button type="submit">{{ copy.save }}</button>
+  </template>
+</FormDrawer>
+```
 
 Правило применения (эталон — kit `/kit/dialogs-overlays`): `FormDrawer` —
 только для редактирования в правой панели с длинным body и fixed footer.
