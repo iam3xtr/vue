@@ -66,4 +66,96 @@ describe("useFocusTrap", () => {
     expect(removeSpy).toHaveBeenCalledWith("keydown", expect.any(Function), true);
     document.removeEventListener = original;
   });
+
+  const makeHarness = (options = {}, empty = false) =>
+    defineComponent({
+      props: { active: Boolean },
+      setup(props) {
+        const container = ref(null);
+        const active = ref(props.active);
+        useFocusTrap(container, active, {
+          ...options,
+          getReturnFocusEl: options.getReturnFocusEl ? () => options.getReturnFocusEl() : undefined,
+        });
+        return { container, active };
+      },
+      render() {
+        return h("div", [
+          h("button", { class: "trigger" }, "Trigger"),
+          h(
+            "div",
+            { ref: "container", tabindex: "-1", class: "box" },
+            empty
+              ? []
+              : [h("button", { class: "first" }, "First"), h("button", { class: "last" }, "Last")],
+          ),
+        ]);
+      },
+    });
+
+  it("immediate: focuses inside an initially-open container; without it nothing happens", async () => {
+    const wrapper = mount(makeHarness({ immediate: true }), {
+      props: { active: true },
+      attachTo: document.body,
+    });
+    await nextTick();
+    await nextTick();
+    expect(document.activeElement).toBe(wrapper.find(".first").element);
+    wrapper.unmount();
+
+    const plain = mount(makeHarness({}), { props: { active: true }, attachTo: document.body });
+    await nextTick();
+    await nextTick();
+    expect(document.activeElement).not.toBe(plain.find(".first").element);
+    plain.unmount();
+  });
+
+  it("contain: Tab from outside is pulled in, and Tab with no focusables stays on the container", async () => {
+    const wrapper = mount(makeHarness({ contain: true }), {
+      props: { active: false },
+      attachTo: document.body,
+    });
+    wrapper.vm.active = true;
+    await nextTick();
+    await nextTick();
+    wrapper.find(".trigger").element.focus();
+    const event = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(wrapper.find(".first").element);
+    wrapper.unmount();
+
+    const empty = mount(makeHarness({ contain: true }, true), {
+      props: { active: false },
+      attachTo: document.body,
+    });
+    empty.vm.active = true;
+    await nextTick();
+    await nextTick();
+    empty.find(".trigger").element.focus();
+    const ev2 = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    document.dispatchEvent(ev2);
+    expect(ev2.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(empty.find(".box").element);
+    empty.unmount();
+  });
+
+  it("skips a detached return-focus element without throwing or moving focus to it", async () => {
+    const detached = document.createElement("button");
+    const wrapper = mount(makeHarness({ getReturnFocusEl: () => detached }), {
+      props: { active: false },
+      attachTo: document.body,
+    });
+    const trigger = wrapper.find(".trigger").element;
+    trigger.focus();
+    wrapper.vm.active = true;
+    await nextTick();
+    await nextTick();
+    const spy = vi.spyOn(detached, "focus");
+    wrapper.vm.active = false;
+    await nextTick();
+    expect(spy).not.toHaveBeenCalled();
+    expect(document.activeElement).not.toBe(detached);
+    wrapper.unmount();
+  });
 });

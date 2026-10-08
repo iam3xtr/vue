@@ -335,12 +335,11 @@ describe("FormDrawer", () => {
       await settle();
       expect(document.activeElement).not.toBe(trigger);
 
-      d.resolve(false);
+      d.resolve(true);
       await pending;
       await settle();
       expect(document.activeElement).not.toBe(trigger);
 
-      d.resolve(true);
       await wrapper.setProps({ modelValue: false });
       await settle();
       expect(document.activeElement).toBe(trigger);
