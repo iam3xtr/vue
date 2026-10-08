@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { h } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
 import Buefy from "buefy";
 
@@ -414,6 +415,99 @@ describe("FormDrawer", () => {
       wrappers.length = 0;
       expect(spy.mock.calls.some(([type]) => type === "keydown")).toBe(true);
       spy.mockRestore();
+    });
+  });
+
+  describe("shell mode", () => {
+    const mounted = [];
+    afterEach(() => {
+      while (mounted.length) mounted.pop().unmount();
+    });
+
+    function mountShell(props = {}, onSubmit = vi.fn()) {
+      const wrapper = mount(
+        {
+          props: { drawerProps: Object, submitSpy: Function },
+          render() {
+            return h(FormDrawer, { ...this.drawerProps, shell: true }, {
+              shell: ({ content: Content }) =>
+                h(
+                  "form",
+                  {
+                    class: "outer",
+                    onSubmit: (e) => {
+                      e.preventDefault();
+                      this.submitSpy(e);
+                    },
+                  },
+                  [h(Content)],
+                ),
+              default: () => h("input", { name: "a" }),
+              footer: ({ requestClose }) => [
+                h("button", { type: "submit", class: "save" }, "Save"),
+                h("button", { type: "button", class: "cancel", onClick: () => requestClose("programmatic") }, "Cancel"),
+              ],
+            });
+          },
+        },
+        {
+          attachTo: document.body,
+          props: { drawerProps: { modelValue: true, ...props }, submitSpy: onSubmit },
+          global: { plugins: [Buefy] },
+        },
+      );
+      mounted.push(wrapper);
+      return { wrapper, onSubmit };
+    }
+
+    // b-sidebar moves its element to document.body, so look there.
+    const drawerEl = () => document.body.querySelector("form.outer").closest(".tr-form-drawer");
+
+    it("renders exactly one form, the consumer's, inside the drawer", () => {
+      mountShell();
+      const el = drawerEl();
+      expect(el.querySelectorAll("form")).toHaveLength(1);
+      expect(el.querySelector("form.outer")).not.toBeNull();
+      expect(el.querySelector("div.tr-form-drawer__form")).not.toBeNull();
+    });
+
+    it("renders body and footer regions inside the consumer form", () => {
+      mountShell();
+      const form = drawerEl().querySelector("form.outer");
+      expect(form.querySelector(".tr-form-drawer__body input[name=a]")).not.toBeNull();
+      expect(form.querySelector(".tr-form-drawer__footer .save")).not.toBeNull();
+      expect(drawerEl().querySelector(".tr-form-drawer__shell > form")).toBe(form);
+    });
+
+    it("submits the consumer form once and never emits submit itself", async () => {
+      const { wrapper, onSubmit } = mountShell();
+      drawerEl().querySelector(".save").click();
+      await flushPromises();
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(wrapper.findComponent(FormDrawer).emitted("submit")).toBeUndefined();
+    });
+
+    it("keeps header close and the slot requestClose on the guarded path", async () => {
+      const beforeClose = vi.fn(() => false);
+      const { wrapper } = mountShell({ beforeClose });
+      drawerEl().querySelector(".tr-form-drawer__close").click();
+      await flushPromises();
+      drawerEl().querySelector(".cancel").click();
+      await flushPromises();
+      expect(beforeClose.mock.calls.map(([r]) => r)).toEqual(["close-button", "programmatic"]);
+      expect(wrapper.findComponent(FormDrawer).emitted("update:modelValue")).toBeUndefined();
+    });
+
+    it("passes requestClose to the default slot in native mode too", async () => {
+      const wrapper = mountDrawer({
+        props: { modelValue: true },
+        slots: {
+          default: `<template #default="{ requestClose }"><button class="x" @click="requestClose('programmatic')">x</button></template>`,
+        },
+      });
+      await wrapper.find(".x").trigger("click");
+      await flushPromises();
+      expect(wrapper.emitted("update:modelValue")).toEqual([[false]]);
     });
   });
 });

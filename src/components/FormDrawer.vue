@@ -8,7 +8,8 @@
     fullheight
     :can-cancel="false"
   >
-    <form
+    <component
+      :is="shell ? 'div' : 'form'"
       ref="formEl"
       class="tr-form-drawer__form"
       tabindex="-1"
@@ -26,19 +27,31 @@
         </button>
       </header>
 
-      <div class="tr-form-drawer__body">
-        <slot :busy="busy" :disabled="disabled" />
+      <div v-if="shell" class="tr-form-drawer__shell">
+        <slot
+          name="shell"
+          :content="ShellContent"
+          :busy="busy"
+          :disabled="disabled"
+          :request-close="requestClose"
+        />
       </div>
 
-      <footer v-if="$slots.footer" class="tr-form-drawer__footer">
-        <slot name="footer" :busy="busy" :disabled="disabled" />
-      </footer>
-    </form>
+      <template v-else>
+        <div class="tr-form-drawer__body">
+          <slot :busy="busy" :disabled="disabled" :request-close="requestClose" />
+        </div>
+
+        <footer v-if="$slots.footer" class="tr-form-drawer__footer">
+          <slot name="footer" :busy="busy" :disabled="disabled" :request-close="requestClose" />
+        </footer>
+      </template>
+    </component>
   </b-sidebar>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, h, onBeforeUnmount, onMounted, ref, useSlots, watch } from "vue";
 
 import { useFocusTrap } from "../composables/useFocusTrap.js";
 
@@ -108,6 +121,30 @@ import { useFocusTrap } from "../composables/useFocusTrap.js";
  * focus trap or focus return, which is why this is layered on its content
  * (via `useFocusTrap`) rather than on any Buefy-internal DOM.
  *
+ * Shell mode: `shell` (Boolean, default `false`) is for a consumer-owned
+ * form such as vee-validate's `<Form>`. The drawer then renders no `<form>`
+ * of its own, so the consumer's form is the only one. It cannot wrap the
+ * drawer from outside because `b-sidebar` moves its element to
+ * `document.body`; instead the `shell` slot is rendered inside the drawer,
+ * under the header, and receives `{ content, busy, disabled, requestClose }`.
+ * `content` is a component that renders the regular default-slot body and
+ * `footer` slot region (same classes, scroll and footer behaviour as the
+ * native mode), so the consumer only places it inside its form:
+ * `<template #shell="{ content }"><Form @submit="save"><component
+ * :is="content" /></Form></template>` (a slot variable cannot be used as a
+ * `<Tag>` in a template, hence `<component :is>`). The default and `footer`
+ * slots are still how the
+ * body and actions are supplied (they stay in the consumer's template scope,
+ * but are rendered under the consumer's form, so vee-validate fields inject
+ * its context); a footer `type="submit"` button submits that form and its
+ * validation decides whether anything is sent. In shell mode `submit` is
+ * never emitted and `busy`/`disabled` remain scoped-slot values the consumer
+ * applies to its own handler. The header close button and `requestClose`
+ * (also a scoped-slot prop of the default, `footer` and `shell` slots, so a
+ * footer cancel button can call `requestClose("programmatic")`) use the
+ * close guard. Native mode is unchanged. The package does not depend on
+ * vee-validate; all copy and accessible names come from the consumer.
+ *
  * Requires Buefy (`b-sidebar`, `b-icon`).
  */
 const props = defineProps({
@@ -131,6 +168,10 @@ const props = defineProps({
     type: Function,
     default: null,
   },
+  shell: {
+    type: Boolean,
+    default: false,
+  },
   closeAriaLabel: {
     type: String,
     default: "Закрыть",
@@ -138,6 +179,22 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["update:modelValue", "submit"]);
+
+const slots = useSlots();
+
+// Renders the default-slot body and `footer` region for shell mode, so the
+// consumer's own form can wrap them without duplicating drawer markup.
+function ShellContent() {
+  const scope = {
+    busy: props.busy,
+    disabled: props.disabled,
+    requestClose,
+  };
+  return [
+    h("div", { class: "tr-form-drawer__body" }, slots.default?.(scope)),
+    slots.footer ? h("footer", { class: "tr-form-drawer__footer" }, slots.footer(scope)) : null,
+  ];
+}
 
 const formEl = ref(null);
 useFocusTrap(
@@ -214,7 +271,7 @@ onBeforeUnmount(() => {
 defineExpose({ requestClose });
 
 function handleSubmit(event) {
-  if (props.busy || props.disabled) return;
+  if (props.shell || props.busy || props.disabled) return;
   emit("submit", event);
 }
 </script>
