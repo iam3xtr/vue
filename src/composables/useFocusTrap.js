@@ -24,7 +24,7 @@
 //
 // No runtime dependency beyond Vue 3 reactivity and DOM APIs.
 
-import { nextTick, onUnmounted, watch } from "vue";
+import { nextTick, onMounted, onUnmounted, watch } from "vue";
 
 const FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -46,7 +46,7 @@ const FOREIGN_OVERLAY_SELECTOR =
  * @param {import("vue").Ref<boolean>} activeRef - mirrors the real open state (e.g. from a host's own `active-change`); this composable only reads it, never writes `false` back
  * @param {{ getReturnFocusEl?: () => (HTMLElement|null|undefined), immediate?: boolean, contain?: boolean }} [options]
  *   - `getReturnFocusEl`: element to refocus on close; falls back to the element focused before opening. A detached element is skipped.
- *   - `immediate`: also run the "activated" step when `activeRef` is already true on setup (initially-open overlay). Default `false`.
+ *   - `immediate`: also run the "activated" step when `activeRef` is already true on mount (initially-open overlay). Default `false`.
  *   - `contain`: strict mode for containers that must hold focus on their own. Tab with no focusable controls keeps focus on the
  *     container (give it `tabindex="-1"`), and Tab while focus is outside the container pulls it back in. Default `false`,
  *     which keeps the original behaviour for hosts that already trap focus themselves. Focus that sits inside a higher overlay
@@ -56,6 +56,7 @@ const FOREIGN_OVERLAY_SELECTOR =
 export function useFocusTrap(containerRef, activeRef, options = {}) {
   const { getReturnFocusEl, immediate = false, contain = false } = options;
   let previouslyFocused = null;
+  let mounted = false;
 
   const getFocusable = () => {
     const container = containerRef.value;
@@ -118,7 +119,7 @@ export function useFocusTrap(containerRef, activeRef, options = {}) {
     previouslyFocused = document.activeElement;
     document.addEventListener("keydown", handleKeydown, true);
     nextTick(() => {
-      if (activeRef.value) focusFirst();
+      if (mounted && activeRef.value) focusFirst();
     });
   };
 
@@ -134,11 +135,18 @@ export function useFocusTrap(containerRef, activeRef, options = {}) {
     if (returnEl && typeof returnEl.focus === "function") returnEl.focus();
   };
 
-  watch(activeRef, (isActive) => (isActive ? activate() : deactivate()), {
-    immediate: immediate && !!activeRef.value,
+  watch(activeRef, (isActive) => {
+    if (mounted) isActive ? activate() : deactivate();
+  });
+
+  // DOM activation belongs to the mounted client, never the SSR setup pass.
+  onMounted(() => {
+    mounted = true;
+    if (immediate && activeRef.value) activate();
   });
 
   onUnmounted(() => {
+    mounted = false;
     document.removeEventListener("keydown", handleKeydown, true);
   });
 }

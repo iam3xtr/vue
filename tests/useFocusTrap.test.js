@@ -132,6 +132,27 @@ describe("useFocusTrap", () => {
     plain.unmount();
   });
 
+  it("does not apply queued initial focus after close or unmount", async () => {
+    const trigger = document.createElement("button");
+    document.body.appendChild(trigger);
+    for (const close of [true, false]) {
+      trigger.focus();
+      const wrapper = mount(makeHarness({ immediate: true }), {
+        props: { active: true },
+        attachTo: document.body,
+      });
+      const focus = vi.spyOn(wrapper.find(".first").element, "focus");
+      if (close) wrapper.vm.active = false;
+      else wrapper.unmount();
+      await nextTick();
+      await nextTick();
+      expect(focus).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(trigger);
+      if (close) wrapper.unmount();
+    }
+    trigger.remove();
+  });
+
   it("contain: Tab from outside is pulled in, and Tab with no focusables stays on the container", async () => {
     const wrapper = mount(makeHarness({ contain: true }), {
       props: { active: false },

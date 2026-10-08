@@ -6,7 +6,7 @@
 // touches a browser global. Buefy's own SSR compatibility is out of scope
 // for this package's contract — only this package's code is asserted here.
 import { describe, expect, it } from "vitest";
-import { createSSRApp } from "vue";
+import { createSSRApp, h } from "vue";
 import { renderToString } from "@vue/server-renderer";
 
 describe("core entry point on the server", () => {
@@ -80,13 +80,18 @@ describe("core entry point on the server", () => {
     expect(html).not.toContain("tr-file-drop-target__overlay");
   });
 
-  // FormDrawer's root element is `b-sidebar` itself (unlike the components
-  // above, which only reach for Buefy on an inner node under a plain
-  // wrapper), so — same as MobileFilters/ToolbarSearch/ToolbarDropdown, not
-  // covered here either — a meaningful render assertion needs Buefy
-  // registered, which is exactly the Buefy-SSR-compat scope this file's own
-  // contract (see header comment) leaves out. Its component test file
-  // covers behavior with Buefy mounted instead.
+  it("server-renders an initially-open FormDrawer without touching document", async () => {
+    const { FormDrawer } = await import("../src/index.js");
+    const app = createSSRApp(FormDrawer, { modelValue: true, title: "Edit" });
+    // Render the drawer's own setup and markup without asserting Buefy's SSR contract.
+    app.component("BSidebar", {
+      setup(_, { slots }) {
+        return () => h("aside", slots.default?.());
+      },
+    });
+    app.component("BIcon", { render: () => h("span") });
+    await expect(renderToString(app)).resolves.toContain("tr-form-drawer__form");
+  });
 
   it("server-renders ChatHistory without throwing or needing Buefy", async () => {
     const { ChatHistory } = await import("../src/index.js");
