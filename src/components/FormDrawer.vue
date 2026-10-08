@@ -282,8 +282,14 @@ function onKeyup(event) {
 
 function onDocumentClick(event) {
   if (!props.modelValue) return;
+  // Only this drawer's own backdrop counts: the `.sidebar-background` that is a
+  // child of the `.b-sidebar` root containing this drawer's form.
+  const root = formEl.value?.closest?.(".b-sidebar");
+  if (!root) return;
   const path = event.composedPath?.() ?? [];
-  if (path.some((node) => node?.classList?.contains("sidebar-background"))) {
+  if (
+    path.some((node) => node?.classList?.contains("sidebar-background") && node.parentNode === root)
+  ) {
     requestClose("backdrop");
   }
 }

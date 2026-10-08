@@ -91,7 +91,7 @@ describe("FormDrawer", () => {
   describe("close guard", () => {
     const wrappers = [];
     function mountGuarded(props = {}) {
-      const wrapper = mountDrawer({ props: { modelValue: true, ...props } });
+      const wrapper = mountDrawer({ props: { modelValue: true, ...props }, attachTo: document.body });
       wrappers.push(wrapper);
       return wrapper;
     }
@@ -100,8 +100,10 @@ describe("FormDrawer", () => {
     });
 
     const escape = () => document.dispatchEvent(new KeyboardEvent("keyup", { key: "Escape" }));
-    const backdrop = () => {
-      const el = document.body.querySelector(".sidebar-background");
+    const backdropOf = (w) =>
+      w.find(".tr-form-drawer__form").element.closest(".b-sidebar").querySelector(".sidebar-background");
+    const backdrop = (w) => {
+      const el = backdropOf(w);
       expect(el).not.toBeNull();
       el.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
     };
@@ -113,7 +115,7 @@ describe("FormDrawer", () => {
     };
     const triggers = {
       escape: [() => escape(), "escape"],
-      backdrop: [() => backdrop(), "backdrop"],
+      backdrop: [(w) => backdrop(w), "backdrop"],
       "close-button": [(w) => button(w), "close-button"],
     };
 
@@ -175,7 +177,7 @@ describe("FormDrawer", () => {
       const beforeClose = vi.fn(() => d.promise);
       const w = mountGuarded({ beforeClose });
       escape();
-      backdrop();
+      backdrop(w);
       await button(w);
       escape();
       expect(beforeClose).toHaveBeenCalledTimes(1);
@@ -267,6 +269,15 @@ describe("FormDrawer", () => {
       await w.find(".tr-form-drawer__body").trigger("click");
       await flushPromises();
       expect(beforeClose).not.toHaveBeenCalled();
+    });
+
+    it("closes only the drawer whose own backdrop was clicked", async () => {
+      const first = mountGuarded();
+      const second = mountGuarded();
+      backdropOf(second).dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+      await flushPromises();
+      expect(first.emitted("update:modelValue")).toBeUndefined();
+      expect(second.emitted("update:modelValue")).toEqual([[false]]);
     });
 
     it("exposes requestClose with a programmatic reason", async () => {
