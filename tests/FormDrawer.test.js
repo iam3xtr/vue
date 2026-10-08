@@ -418,6 +418,14 @@ describe("FormDrawer", () => {
   });
 
   describe("shell mode", () => {
+    it("warns in dev when shell is true but no shell slot is provided", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const wrapper = mountDrawer({ props: { modelValue: true, shell: true } });
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('no "shell" slot'));
+      wrapper.unmount();
+      warn.mockRestore();
+    });
+
     const mounted = [];
     afterEach(() => {
       while (mounted.length) mounted.pop().unmount();

@@ -133,7 +133,12 @@ import { useFocusTrap } from "../composables/useFocusTrap.js";
  * native mode), so the consumer only places it inside its form:
  * `<template #shell="{ content }"><Form @submit="save"><component
  * :is="content" /></Form></template>` (a slot variable cannot be used as a
- * `<Tag>` in a template, hence `<component :is>`). The default and `footer`
+ * `<Tag>` in a template, hence `<component :is>`). The consumer's form must be
+ * a direct child of the `shell` slot root (it becomes a direct child of
+ * `.tr-form-drawer__shell`); the theme's flex layout and the body scroll/fixed
+ * footer depend on it, so do not wrap it in another element. `shell` without a
+ * `shell` slot renders an empty body (a dev-only console warning is logged).
+ * The default and `footer`
  * slots are still how the
  * body and actions are supplied (they stay in the consumer's template scope,
  * but are rendered under the consumer's form, so vee-validate fields inject
@@ -146,7 +151,8 @@ import { useFocusTrap } from "../composables/useFocusTrap.js";
  * close guard. Native mode is unchanged. The package does not depend on
  * vee-validate; all copy and accessible names come from the consumer.
  *
- * Width: `width` (String, optional — any CSS length such as `"42rem"`) sets
+ * Width: `width` (String, optional — must be a valid CSS length such as `"42rem"`; it is
+ * not validated, an invalid value is ignored by the browser) sets
  * the panel width through the `--tr-form-drawer-width` custom property that
  * the `@iam3xtr/ui` theme consumes; no consumer CSS override is needed.
  * Without it the default is `420px`. The theme always clamps the panel to the
@@ -193,6 +199,15 @@ const props = defineProps({
 const emit = defineEmits(["update:modelValue", "submit"]);
 
 const slots = useSlots();
+
+onMounted(() => {
+  if (import.meta.env?.DEV && props.shell && !slots.shell) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      'FormDrawer: "shell" is true but no "shell" slot was provided — the drawer body will be empty.',
+    );
+  }
+});
 
 // Renders the default-slot body and `footer` region for shell mode, so the
 // consumer's own form can wrap them without duplicating drawer markup.
