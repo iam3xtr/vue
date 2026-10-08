@@ -38,10 +38,15 @@ const FOCUSABLE_SELECTOR = [
 /**
  * @param {import("vue").Ref<HTMLElement|null>} containerRef - element the trap is scoped to
  * @param {import("vue").Ref<boolean>} activeRef - mirrors the real open state (e.g. from a host's own `active-change`); this composable only reads it, never writes `false` back
- * @param {{ getReturnFocusEl?: () => (HTMLElement|null|undefined) }} [options] - element to refocus on close; falls back to the element focused before opening
+ * @param {{ getReturnFocusEl?: () => (HTMLElement|null|undefined), immediate?: boolean, contain?: boolean }} [options]
+ *   - `getReturnFocusEl`: element to refocus on close; falls back to the element focused before opening. A detached element is skipped.
+ *   - `immediate`: also run the "activated" step when `activeRef` is already true on setup (initially-open overlay). Default `false`.
+ *   - `contain`: strict mode for containers that must hold focus on their own. Tab with no focusable controls keeps focus on the
+ *     container (give it `tabindex="-1"`), and Tab while focus is outside the container pulls it back in. Default `false`,
+ *     which keeps the original behaviour for hosts that already trap focus themselves.
  */
 export function useFocusTrap(containerRef, activeRef, options = {}) {
-  const { getReturnFocusEl } = options;
+  const { getReturnFocusEl, immediate = false, contain = false } = options;
   let previouslyFocused = null;
 
   const getFocusable = () => {
@@ -67,12 +72,21 @@ export function useFocusTrap(containerRef, activeRef, options = {}) {
     if (event.key !== "Tab") return;
 
     const focusable = getFocusable();
-    if (!focusable.length) return;
+    if (!focusable.length) {
+      if (contain && containerRef.value) {
+        event.preventDefault();
+        containerRef.value.focus();
+      }
+      return;
+    }
 
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
 
-    if (event.shiftKey && document.activeElement === first) {
+    if (contain && !containerRef.value.contains(document.activeElement)) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    } else if (event.shiftKey && document.activeElement === first) {
       event.preventDefault();
       last.focus();
     } else if (!event.shiftKey && document.activeElement === last) {
@@ -81,19 +95,26 @@ export function useFocusTrap(containerRef, activeRef, options = {}) {
     }
   };
 
-  watch(activeRef, (isActive) => {
-    if (isActive) {
-      previouslyFocused = document.activeElement;
-      document.addEventListener("keydown", handleKeydown, true);
-      nextTick(focusFirst);
-    } else {
-      document.removeEventListener("keydown", handleKeydown, true);
-      const returnEl =
-        (typeof getReturnFocusEl === "function" ? getReturnFocusEl() : null) ??
-        previouslyFocused;
-      previouslyFocused = null;
-      if (returnEl && typeof returnEl.focus === "function") returnEl.focus();
-    }
+  const activate = () => {
+    previouslyFocused = document.activeElement;
+    document.addEventListener("keydown", handleKeydown, true);
+    nextTick(() => {
+      if (activeRef.value) focusFirst();
+    });
+  };
+
+  const deactivate = () => {
+    document.removeEventListener("keydown", handleKeydown, true);
+    const candidate =
+      (typeof getReturnFocusEl === "function" ? getReturnFocusEl() : null) ?? previouslyFocused;
+    previouslyFocused = null;
+    // A trigger removed from the DOM while the overlay was open cannot take focus.
+    const returnEl = candidate && candidate.isConnected !== false ? candidate : null;
+    if (returnEl && typeof returnEl.focus === "function") returnEl.focus();
+  };
+
+  watch(activeRef, (isActive) => (isActive ? activate() : deactivate()), {
+    immediate: immediate && !!activeRef.value,
   });
 
   onUnmounted(() => {

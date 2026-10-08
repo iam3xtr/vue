@@ -8,7 +8,12 @@
     fullheight
     :can-cancel="false"
   >
-    <form class="tr-form-drawer__form" @submit.prevent="handleSubmit">
+    <form
+      ref="formEl"
+      class="tr-form-drawer__form"
+      tabindex="-1"
+      @submit.prevent="handleSubmit"
+    >
       <header class="tr-form-drawer__header">
         <h2 v-if="title" class="tr-form-drawer__title">{{ title }}</h2>
         <button
@@ -33,7 +38,9 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+
+import { useFocusTrap } from "../composables/useFocusTrap.js";
 
 /**
  * Shared right-hand form drawer built on Buefy's own `b-sidebar` (`right`,
@@ -89,14 +96,17 @@ import { onBeforeUnmount, onMounted, watch } from "vue";
  * upload) returns `false` from `beforeClose`. `requestClose(reason?)` is
  * available through a template ref and resolves to whether the drawer closed.
  *
- * Explicit Buefy limitation: `b-sidebar` implements Escape-to-close,
- * outside-click-to-close and scroll lock itself, but — unlike `b-modal` —
- * it does not implement a focus trap or focus-return-to-trigger on close.
- * This component intentionally does not layer a custom focus trap over
- * `b-sidebar` to compensate (that would be exactly the "самодельный
- * overlay" this contract avoids); a consumer that needs trapped/returned
- * focus for a specific drawer instance can compose `useFocusTrap` from this
- * same package around its own trigger/drawer refs.
+ * Focus management: built in, no consumer wiring. When the drawer actually
+ * opens (including when it is mounted already open) focus moves to the first
+ * focusable control inside it; Tab/Shift+Tab cycle within the drawer (and a
+ * drawer without focusable controls holds focus on its own container instead
+ * of letting it escape); when it actually closes focus returns to the element
+ * that had it before opening, unless that element is gone from the DOM.
+ * "Actually" means driven by `modelValue`, so a close request denied or still
+ * pending in `beforeClose` never moves focus. Escape is handled once, by the
+ * close guard above, never by the focus trap. `b-sidebar` itself provides no
+ * focus trap or focus return, which is why this is layered on its content
+ * (via `useFocusTrap`) rather than on any Buefy-internal DOM.
  *
  * Requires Buefy (`b-sidebar`, `b-icon`).
  */
@@ -128,6 +138,13 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["update:modelValue", "submit"]);
+
+const formEl = ref(null);
+useFocusTrap(
+  formEl,
+  computed(() => props.modelValue),
+  { immediate: true, contain: true },
+);
 
 let generation = 0;
 let pending = null;

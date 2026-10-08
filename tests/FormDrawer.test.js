@@ -264,4 +264,156 @@ describe("FormDrawer", () => {
       expect(w.emitted("submit")).toBeUndefined();
     });
   });
+  describe("focus management", () => {
+    const wrappers = [];
+    const nodes = [];
+    afterEach(() => {
+      wrappers.splice(0).forEach((w) => w.unmount());
+      nodes.splice(0).forEach((n) => n.remove());
+    });
+    function setup(props = {}, slots = {}) {
+      const trigger = document.createElement("button");
+      trigger.textContent = "Open";
+      document.body.appendChild(trigger);
+      nodes.push(trigger);
+      trigger.focus();
+      const wrapper = mountDrawer({
+        attachTo: document.body,
+        props: { modelValue: false, ...props },
+        slots: {
+          default: '<input class="f1" /><input class="f2" />',
+          ...(slots.default ? {} : { footer: '<button type="button" class="save">Save</button>' }),
+          ...slots,
+        },
+      });
+      wrappers.push(wrapper);
+      return { wrapper, trigger };
+    }
+    const tab = (shiftKey = false) => {
+      const e = new KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true, cancelable: true });
+      document.dispatchEvent(e);
+      return e;
+    };
+    const settle = async () => {
+      await flushPromises();
+      await flushPromises();
+    };
+
+    it("moves focus into the drawer on open and cycles Tab in both directions", async () => {
+      const { wrapper } = setup();
+      await wrapper.setProps({ modelValue: true });
+      await settle();
+      const close = wrapper.find(".tr-form-drawer__close").element;
+      expect(document.activeElement).toBe(close);
+
+      wrapper.find(".save").element.focus();
+      tab();
+      expect(document.activeElement).toBe(close);
+      tab(true);
+      expect(document.activeElement).toBe(wrapper.find(".save").element);
+    });
+
+    it("focuses an initially-open drawer", async () => {
+      const { wrapper } = setup({ modelValue: true });
+      await settle();
+      expect(document.activeElement).toBe(wrapper.find(".tr-form-drawer__close").element);
+    });
+
+    it("returns focus to the trigger only after the drawer actually closes", async () => {
+      const d = (() => {
+        let resolve;
+        const promise = new Promise((r) => (resolve = r));
+        return { promise, resolve };
+      })();
+      const { wrapper, trigger } = setup({ beforeClose: () => d.promise });
+      await wrapper.setProps({ modelValue: true });
+      await settle();
+      expect(document.activeElement).not.toBe(trigger);
+
+      const pending = wrapper.vm.requestClose("close-button");
+      await settle();
+      expect(document.activeElement).not.toBe(trigger);
+
+      d.resolve(false);
+      await pending;
+      await settle();
+      expect(document.activeElement).not.toBe(trigger);
+
+      d.resolve(true);
+      await wrapper.setProps({ modelValue: false });
+      await settle();
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    it("does not return focus after a denied guard", async () => {
+      const { wrapper, trigger } = setup({ beforeClose: () => Promise.resolve(false) });
+      await wrapper.setProps({ modelValue: true });
+      await settle();
+      await wrapper.find(".tr-form-drawer__close").trigger("click");
+      await settle();
+      expect(wrapper.emitted("update:modelValue")).toBeUndefined();
+      expect(document.activeElement).not.toBe(trigger);
+    });
+
+    it("handles Escape through the guard exactly once", async () => {
+      const beforeClose = vi.fn().mockResolvedValue(true);
+      const { wrapper } = setup({ beforeClose });
+      await wrapper.setProps({ modelValue: true });
+      await settle();
+      document.dispatchEvent(new KeyboardEvent("keyup", { key: "Escape" }));
+      await settle();
+      expect(beforeClose).toHaveBeenCalledTimes(1);
+      expect(wrapper.emitted("update:modelValue")).toEqual([[false]]);
+    });
+
+    it("holds focus on the panel when it has no focusable controls", async () => {
+      const { wrapper } = setup(
+        {},
+        { default: "<p>Nothing to focus</p>" },
+      );
+      // The header close button is always focusable; remove it to simulate an empty panel.
+      wrapper.find(".tr-form-drawer__close").element.setAttribute("disabled", "");
+      await wrapper.setProps({ modelValue: true });
+      await settle();
+      const form = wrapper.find(".tr-form-drawer__form").element;
+      expect(document.activeElement).toBe(form);
+      const e = tab();
+      expect(e.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(form);
+    });
+
+    it("pulls focus back in when Tab is pressed from outside the drawer", async () => {
+      const { wrapper, trigger } = setup();
+      await wrapper.setProps({ modelValue: true });
+      await settle();
+      trigger.focus();
+      const e = tab();
+      expect(e.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(wrapper.find(".tr-form-drawer__close").element);
+    });
+
+    it("does not throw when the trigger disappeared, and works on reopen", async () => {
+      const { wrapper, trigger } = setup();
+      await wrapper.setProps({ modelValue: true });
+      await settle();
+      trigger.remove();
+      await wrapper.setProps({ modelValue: false });
+      await settle();
+      expect(document.activeElement).not.toBe(trigger);
+
+      await wrapper.setProps({ modelValue: true });
+      await settle();
+      expect(document.activeElement).toBe(wrapper.find(".tr-form-drawer__close").element);
+    });
+
+    it("removes its keydown listener on unmount", async () => {
+      const spy = vi.spyOn(document, "removeEventListener");
+      const { wrapper } = setup({ modelValue: true });
+      await settle();
+      wrapper.unmount();
+      wrappers.length = 0;
+      expect(spy.mock.calls.some(([type]) => type === "keydown")).toBe(true);
+      spy.mockRestore();
+    });
+  });
 });
