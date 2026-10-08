@@ -35,6 +35,12 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(",");
 
+// Overlays that may legitimately stack above a trapped container (Buefy
+// `b-modal`, native/ARIA dialogs). Focus inside one of them belongs to that
+// overlay's own trap, so the container must not pull Tab back out of it.
+const FOREIGN_OVERLAY_SELECTOR =
+  ".modal, dialog[open], [role='dialog'], [role='alertdialog'], [aria-modal='true']";
+
 /**
  * @param {import("vue").Ref<HTMLElement|null>} containerRef - element the trap is scoped to
  * @param {import("vue").Ref<boolean>} activeRef - mirrors the real open state (e.g. from a host's own `active-change`); this composable only reads it, never writes `false` back
@@ -43,7 +49,9 @@ const FOCUSABLE_SELECTOR = [
  *   - `immediate`: also run the "activated" step when `activeRef` is already true on setup (initially-open overlay). Default `false`.
  *   - `contain`: strict mode for containers that must hold focus on their own. Tab with no focusable controls keeps focus on the
  *     container (give it `tabindex="-1"`), and Tab while focus is outside the container pulls it back in. Default `false`,
- *     which keeps the original behaviour for hosts that already trap focus themselves.
+ *     which keeps the original behaviour for hosts that already trap focus themselves. Focus that sits inside a higher overlay
+ *     (`.modal`, `dialog[open]`, `[role=dialog|alertdialog]`, `[aria-modal=true]`) outside the container is left alone, so a
+ *     stacked confirmation keeps its own Tab handling.
  */
 export function useFocusTrap(containerRef, activeRef, options = {}) {
   const { getReturnFocusEl, immediate = false, contain = false } = options;
@@ -63,6 +71,15 @@ export function useFocusTrap(containerRef, activeRef, options = {}) {
     else containerRef.value?.focus();
   };
 
+  const isInForeignOverlay = (el) => {
+    const container = containerRef.value;
+    if (!container || !el || container.contains(el) || !el.closest)
+      return false;
+    const overlay = el.closest(FOREIGN_OVERLAY_SELECTOR);
+    // An overlay that wraps the container (e.g. the drawer's own dialog role) is not "higher".
+    return !!overlay && !overlay.contains(container);
+  };
+
   const handleKeydown = (event) => {
     if (!activeRef.value) return;
 
@@ -70,6 +87,8 @@ export function useFocusTrap(containerRef, activeRef, options = {}) {
     // above: the host overlay's own listener closes it, and this
     // composable reacts to that real close via the `watch` below.
     if (event.key !== "Tab") return;
+
+    if (isInForeignOverlay(document.activeElement)) return;
 
     const focusable = getFocusable();
     if (!focusable.length) {
@@ -106,10 +125,12 @@ export function useFocusTrap(containerRef, activeRef, options = {}) {
   const deactivate = () => {
     document.removeEventListener("keydown", handleKeydown, true);
     const candidate =
-      (typeof getReturnFocusEl === "function" ? getReturnFocusEl() : null) ?? previouslyFocused;
+      (typeof getReturnFocusEl === "function" ? getReturnFocusEl() : null) ??
+      previouslyFocused;
     previouslyFocused = null;
     // A trigger removed from the DOM while the overlay was open cannot take focus.
-    const returnEl = candidate && candidate.isConnected !== false ? candidate : null;
+    const returnEl =
+      candidate && candidate.isConnected !== false ? candidate : null;
     if (returnEl && typeof returnEl.focus === "function") returnEl.focus();
   };
 

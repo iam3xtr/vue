@@ -25,7 +25,10 @@ const Harness = defineComponent({
 
 describe("useFocusTrap", () => {
   it("moves focus to the first focusable element once activated, and returns it to the trigger on close", async () => {
-    const wrapper = mount(Harness, { props: { active: false }, attachTo: document.body });
+    const wrapper = mount(Harness, {
+      props: { active: false },
+      attachTo: document.body,
+    });
     const trigger = wrapper.find(".trigger").element;
     trigger.focus();
     expect(document.activeElement).toBe(trigger);
@@ -43,14 +46,21 @@ describe("useFocusTrap", () => {
   });
 
   it("traps Tab within the container while active", async () => {
-    const wrapper = mount(Harness, { props: { active: false }, attachTo: document.body });
+    const wrapper = mount(Harness, {
+      props: { active: false },
+      attachTo: document.body,
+    });
     wrapper.vm.active = true;
     await nextTick();
     await nextTick();
 
     const last = wrapper.find(".last").element;
     last.focus();
-    const event = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    const event = new KeyboardEvent("keydown", {
+      key: "Tab",
+      bubbles: true,
+      cancelable: true,
+    });
     document.dispatchEvent(event);
     expect(document.activeElement).toBe(wrapper.find(".first").element);
 
@@ -63,7 +73,11 @@ describe("useFocusTrap", () => {
     document.removeEventListener = removeSpy;
     const wrapper = mount(Harness, { props: { active: true } });
     wrapper.unmount();
-    expect(removeSpy).toHaveBeenCalledWith("keydown", expect.any(Function), true);
+    expect(removeSpy).toHaveBeenCalledWith(
+      "keydown",
+      expect.any(Function),
+      true,
+    );
     document.removeEventListener = original;
   });
 
@@ -75,7 +89,9 @@ describe("useFocusTrap", () => {
         const active = ref(props.active);
         useFocusTrap(container, active, {
           ...options,
-          getReturnFocusEl: options.getReturnFocusEl ? () => options.getReturnFocusEl() : undefined,
+          getReturnFocusEl: options.getReturnFocusEl
+            ? () => options.getReturnFocusEl()
+            : undefined,
         });
         return { container, active };
       },
@@ -87,7 +103,10 @@ describe("useFocusTrap", () => {
             { ref: "container", tabindex: "-1", class: "box" },
             empty
               ? []
-              : [h("button", { class: "first" }, "First"), h("button", { class: "last" }, "Last")],
+              : [
+                  h("button", { class: "first" }, "First"),
+                  h("button", { class: "last" }, "Last"),
+                ],
           ),
         ]);
       },
@@ -103,7 +122,10 @@ describe("useFocusTrap", () => {
     expect(document.activeElement).toBe(wrapper.find(".first").element);
     wrapper.unmount();
 
-    const plain = mount(makeHarness({}), { props: { active: true }, attachTo: document.body });
+    const plain = mount(makeHarness({}), {
+      props: { active: true },
+      attachTo: document.body,
+    });
     await nextTick();
     await nextTick();
     expect(document.activeElement).not.toBe(plain.find(".first").element);
@@ -119,7 +141,11 @@ describe("useFocusTrap", () => {
     await nextTick();
     await nextTick();
     wrapper.find(".trigger").element.focus();
-    const event = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    const event = new KeyboardEvent("keydown", {
+      key: "Tab",
+      bubbles: true,
+      cancelable: true,
+    });
     document.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
     expect(document.activeElement).toBe(wrapper.find(".first").element);
@@ -133,7 +159,11 @@ describe("useFocusTrap", () => {
     await nextTick();
     await nextTick();
     empty.find(".trigger").element.focus();
-    const ev2 = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    const ev2 = new KeyboardEvent("keydown", {
+      key: "Tab",
+      bubbles: true,
+      cancelable: true,
+    });
     document.dispatchEvent(ev2);
     expect(ev2.defaultPrevented).toBe(true);
     expect(document.activeElement).toBe(empty.find(".box").element);
@@ -157,5 +187,53 @@ describe("useFocusTrap", () => {
     expect(spy).not.toHaveBeenCalled();
     expect(document.activeElement).not.toBe(detached);
     wrapper.unmount();
+  });
+
+  it("contain: does not steal Tab, Shift+Tab or Escape from a stacked overlay outside the container", async () => {
+    for (const empty of [false, true]) {
+      const wrapper = mount(makeHarness({ contain: true }, empty), {
+        props: { active: false },
+        attachTo: document.body,
+      });
+      wrapper.vm.active = true;
+      await nextTick();
+      await nextTick();
+
+      const modal = document.createElement("div");
+      modal.className = "modal is-active";
+      modal.innerHTML =
+        '<button class="m-cancel">Cancel</button><button class="m-ok">OK</button>';
+      document.body.appendChild(modal);
+      const cancel = modal.querySelector(".m-cancel");
+      cancel.focus();
+
+      for (const init of [
+        { key: "Tab" },
+        { key: "Tab", shiftKey: true },
+        { key: "Escape" },
+      ]) {
+        const ev = new KeyboardEvent("keydown", {
+          ...init,
+          bubbles: true,
+          cancelable: true,
+        });
+        document.dispatchEvent(ev);
+        expect(ev.defaultPrevented).toBe(false);
+        expect(document.activeElement).toBe(cancel);
+      }
+
+      // Plain outside focus (not in an overlay) is still pulled back in.
+      wrapper.find(".trigger").element.focus();
+      const ev = new KeyboardEvent("keydown", {
+        key: "Tab",
+        bubbles: true,
+        cancelable: true,
+      });
+      document.dispatchEvent(ev);
+      expect(ev.defaultPrevented).toBe(true);
+
+      modal.remove();
+      wrapper.unmount();
+    }
   });
 });
