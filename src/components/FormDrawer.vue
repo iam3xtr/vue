@@ -262,6 +262,11 @@ function requestClose(reason = "programmatic") {
     return true;
   })();
   pending = run;
+  // A synchronous beforeClose throw settles `run` before `pending = run` is
+  // assigned, so the in-body reset cannot clear it; clear by identity here.
+  run.then(() => {
+    if (pending === run) pending = null;
+  });
   return run;
 }
 

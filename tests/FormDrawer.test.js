@@ -195,6 +195,23 @@ describe("FormDrawer", () => {
       expect(w.emitted("update:modelValue")).toEqual([[false]]);
     });
 
+    it("allows a retry after a synchronous beforeClose throw", async () => {
+      const beforeClose = vi
+        .fn()
+        .mockImplementationOnce(() => {
+          throw new Error("x");
+        })
+        .mockResolvedValueOnce(true);
+      const w = mountGuarded({ beforeClose });
+      await button(w);
+      await flushPromises();
+      expect(w.emitted("update:modelValue")).toBeUndefined();
+      await button(w);
+      await flushPromises();
+      expect(beforeClose).toHaveBeenCalledTimes(2);
+      expect(w.emitted("update:modelValue")).toEqual([[false]]);
+    });
+
     it("discards a stale result after an external close", async () => {
       const d = deferred();
       const w = mountGuarded({ beforeClose: () => d.promise });
