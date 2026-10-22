@@ -66,6 +66,12 @@ describe("peer dependency contract", () => {
     });
   });
 
+  it("admits both Vue Router majors verified for ./navigation (4.6+ and 5.x)", () => {
+    // Verified in isolated installs: 4.6.0, 4.6.4, 5.0.0 and 5.4.0. A new
+    // major must be added here only after the navigation suite passes on it.
+    expect(pkg.peerDependencies["vue-router"]).toBe("^4.6.0 || ^5.0.0");
+  });
+
   it("marks vue-router optional (only ./navigation needs it)", () => {
     expect(pkg.peerDependenciesMeta["vue-router"].optional).toBe(true);
   });

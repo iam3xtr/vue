@@ -22,7 +22,7 @@
     "peerDependencies": {
         "vue": "^3.5.0",
         "buefy": "^3.0.0",
-        "vue-router": "^4.6.0",
+        "vue-router": "^4.6.0 || ^5.0.0",
         "@iam3xtr/ui": "^0.1.4"
     },
     "peerDependenciesMeta": {
@@ -33,12 +33,12 @@
     "devDependencies": {
         "@iam3xtr/ui": "file:../ui",
         "@vitejs/plugin-vue": "^5.2.1",
-        "@vue/server-renderer": "^3.5.39",
+        "@vue/server-renderer": "^3.5.44",
         "@vue/test-utils": "^2.5.0",
-        "buefy": "^3.0.8",
+        "buefy": "^3.1.0",
         "jsdom": "^30.0.1",
         "vite": "^6.0.5",
-        "vue": "^3.5.39",
+        "vue": "^3.5.44",
         "vue-router": "^4.6.4",
         "vitest": "^4.1.11"
     },
