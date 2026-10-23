@@ -587,8 +587,8 @@ including nested Toolbar and ListAsyncState calls, before upgrading.
 ## FilterSelect (unpublished source candidate)
 
 Core export `FilterSelect`; plugin name `tr-filter-select`. Requires Buefy and
-`@iam3xtr/ui` `.tr-filter-select*` styles. Controlled non-searchable selection;
-search and custom entry are not implemented in this candidate.
+`@iam3xtr/ui` `.tr-filter-select*` styles. Controlled single/multi selection,
+optional local search and explicit custom value entry; no API/catalog fetching.
 
 `options` is `{ value: string, label: string, disabled?: boolean }[]`. Non-empty
 string IDs are preserved without trimming/coercion; blank labels/invalid entries
@@ -609,6 +609,24 @@ option focus without selection; Enter/Space commits; Escape closes and contains
 the matching keyup so enclosing hosts do not also close. Buefy handles outside
 click/mobile presentation/Tab trapping. `useDropdownOverlay` adds opt-in
 `viewportBounds` with cleanup; its default remains false for existing callers.
+
+`searchable` matches a trimmed query case-insensitively against both label and
+value. Query edits/clear never change selection; close clears the query. Supply
+`searchLabel`, optional `searchPlaceholder`, and `noResultsLabel`. ArrowDown
+moves from the input into options; ArrowUp from the first option returns to it.
+Enter in the input never selects the first suggestion or submits an outer form.
+
+`allowCustom` renders the input even without search (the catalog then stays
+unfiltered). Explicit Enter or the add button commits a custom value. Supply
+`customLabel` with `{value}`, `customInvalidLabel` and `customDuplicateLabel`.
+`normalizeCustom(query)` defaults to trim; it must return a string.
+`validateCustom(value)` must return true to accept; the default accepts nonempty
+strings. Already-selected values and disabled catalog values are rejected;
+an existing enabled catalog ID selects that option. Multi commits append and
+keep the popup open; single commits close and return focus. With search/custom
+enabled, unknown selected IDs appear as historical options and can be removed
+in multi mode; reset clears either mode. IME keys never commit, and composing
+Escape is contained through keyup without closing the popup or its host.
 
 Publish compatible Vue and UI candidates before consumer adoption; no package
 version is selected or changed here. The new styles are not provided by published
