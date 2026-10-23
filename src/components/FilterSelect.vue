@@ -41,7 +41,7 @@
         @keyup.esc="onEscapeUp"
       >
         <input
-          v-if="searchable"
+          v-if="showInput"
           ref="searchRef"
           v-model="query"
           type="search"
@@ -132,7 +132,9 @@ import { POSITIONS, resolveDropdownPlacement, useDropdownOverlay } from "../comp
  * Search never auto-selects: Enter in the field commits only through the opt-in
  * allowCustom path; ArrowDown moves focus to the list. Keys during IME
  * composition are ignored and Enter never submits an enclosing form.
- * Custom entry (allowCustom): an explicit Enter or click on the add row passes
+ * Custom entry (allowCustom): renders the text input even without searchable,
+ * but then the query does not filter the option list (only searchable filters).
+ * An explicit Enter or click on the add row passes
  * the query through normalizeCustom (default trim) and validateCustom (default
  * nonempty); invalid or already-selected values emit nothing and show copy. A
  * value equal to an unselected catalog option selects that option. Multi appends
@@ -140,8 +142,8 @@ import { POSITIONS, resolveDropdownPlacement, useDropdownOverlay } from "../comp
  *
  * Required consumer copy: ariaLabel (trigger/listbox), placeholder, resetLabel,
  * selectedCountLabel (multiple selection; template with {count}), emptyLabel when
- * options are empty and loadingLabel while loading; searchLabel and
- * noResultsLabel when searchable; customLabel ("{value}" template),
+ * options are empty and loadingLabel while loading; searchLabel when
+ * the input renders (searchable or allowCustom) and noResultsLabel when searchable; customLabel ("{value}" template),
  * customInvalidLabel and customDuplicateLabel when allowCustom. No language defaults. Missing
  * names warn in development. Option labels and selected IDs are consumer data.
  * Selection is announced through aria-selected and a polite consumer-owned status.
@@ -193,6 +195,7 @@ const customError = ref(null);
 watch(query, () => { customError.value = null; });
 const needle = computed(() => query.value.trim().toLocaleLowerCase());
 const showHistorical = computed(() => props.searchable || props.allowCustom);
+const showInput = computed(() => props.searchable || props.allowCustom);
 const visibleOptions = computed(() => {
   const known = new Set(normalizedOptions.value.map((option) => option.value));
   const historical = showHistorical.value
@@ -296,7 +299,7 @@ function onSearchKeydown(event) {
 function onListKeydown(event) {
   if (composing(event)) return;
   const options = enabledOptions.value;
-  if (event.key === "ArrowUp" && props.searchable
+  if (event.key === "ArrowUp" && showInput.value
     && (!options.length || options[0].value === focusValue.value)) {
     event.preventDefault();
     event.stopPropagation();
@@ -364,7 +367,7 @@ async function onActiveChange(value) {
   await nextTick();
   refreshRefs();
   if (!value) { query.value = ""; customError.value = null; return; }
-  if (props.searchable && !focusLast) { searchRef.value?.focus(); return; }
+  if (showInput.value && !focusLast) { searchRef.value?.focus(); return; }
   const options = enabledOptions.value;
   const chosen = options.find((o) => isSelected(o.value));
   const target = focusLast ? options.at(-1) : (chosen ?? options[0]);
@@ -392,7 +395,7 @@ useCopyDiagnostics("FilterSelect", {
   resetLabel: () => props.resetLabel,
   selectedCountLabel: () => !props.multiple || !selectedValues.value.length || props.selectedCountLabel,
   emptyLabel: () => props.loading || normalizedOptions.value.length > 0 || props.emptyLabel,
-  searchLabel: () => !props.searchable || props.searchLabel,
+  searchLabel: () => !showInput.value || props.searchLabel,
   noResultsLabel: () => !props.searchable || props.noResultsLabel,
   customLabel: () => !props.allowCustom || props.customLabel,
   customInvalidLabel: () => !props.allowCustom || props.customInvalidLabel,

@@ -251,8 +251,6 @@ describe("FilterSelect search and historical values", () => {
     expect(wrapper.emitted("update:modelValue")[1][0]).toEqual(["a", "new-model", "b"]);
   });
   it("single custom closes with focus return and keeps the value after reset", async () => {
-    const wrapper = render({ ...custom, modelValue: null }); await open(wrapper);
-    expect(wrapper.find(".tr-filter-select__custom").exists()).toBe(false);
     const wrapperS = render({ ...search, ...custom }); await open(wrapperS);
     await type(wrapperS, "legacy");
     await wrapperS.find(".tr-filter-select__custom").trigger("click"); await settle();
@@ -263,6 +261,15 @@ describe("FilterSelect search and historical values", () => {
     expect(items(wrapperS)[0].classes()).toContain("is-historical");
     await wrapperS.find(".tr-filter-select__reset").trigger("click"); await settle();
     expect(wrapperS.emitted("update:modelValue")[1]).toEqual([null]);
+  });
+  it("allowCustom alone renders the input, does not filter options and commits explicitly", async () => {
+    const wrapper = render({ ...custom, searchLabel: "Custom value", modelValue: null }); await open(wrapper);
+    expect(field(wrapper).exists()).toBe(true);
+    expect(wrapper.find(".tr-filter-select__custom").exists()).toBe(false);
+    await type(wrapper, "legacy");
+    expect(items(wrapper)).toHaveLength(3);
+    await wrapper.find(".tr-filter-select__custom").trigger("click"); await settle();
+    expect(wrapper.emitted("update:modelValue")).toEqual([["legacy"]]);
   });
   it("selects an existing catalog option instead of creating a duplicate; ignores IME composition", async () => {
     const wrapper = render({ ...search, ...custom, multiple: true }); await open(wrapper);
