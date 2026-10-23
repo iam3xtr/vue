@@ -331,6 +331,8 @@ function open(last = false) {
 }
 let escapeConsumed = false;
 function onEscape(event) {
+  // A fresh Escape keydown that is not consumed means any earlier consumed press is stale.
+  escapeConsumed = false;
   if (!isActive.value || composing(event)) return;
   event.preventDefault();
   event.stopPropagation();
@@ -358,6 +360,7 @@ function refreshRefs() {
 }
 async function onActiveChange(value) {
   isActive.value = !!value;
+  if (value) escapeConsumed = false;
   await nextTick();
   refreshRefs();
   if (!value) { query.value = ""; customError.value = null; return; }

@@ -128,6 +128,18 @@ describe("FilterSelect keyboard/copy/overlay", () => {
       expect(wrapper.emitted("update:modelValue")).toHaveLength(1);
     } finally { document.removeEventListener("keyup", host); }
   });
+  it("does not swallow a later trigger Escape keyup after the consumed press was released elsewhere", async () => {
+    const wrapper = render(); await open(wrapper);
+    const host = vi.fn(); document.addEventListener("keyup", host);
+    try {
+      await items(wrapper)[0].trigger("keydown", { key: "Escape" }); await settle();
+      document.body.dispatchEvent(new KeyboardEvent("keyup", { key: "Escape", bubbles: true }));
+      host.mockClear();
+      await trigger(wrapper).trigger("keydown", { key: "Escape" });
+      await trigger(wrapper).trigger("keyup", { key: "Escape" });
+      expect(host).toHaveBeenCalledTimes(1);
+    } finally { document.removeEventListener("keyup", host); }
+  });
   it("reacts to consumer locale props and diagnoses missing copy without defaults", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const wrapper = render({ multiple: true, modelValue: ["a"], selectedCountLabel: undefined });
