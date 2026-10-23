@@ -13,6 +13,8 @@
 // required peer for `Loader` (inlines its SVG marks) and is the recommended
 // source for `Icon`'s custom-icon registry (see `icon-registry.js`).
 export { default as Icon } from "./components/Icon.vue";
+export { default as ChannelTypeIcon } from "./components/ChannelTypeIcon.vue";
+export { CHANNEL_TYPES, normalizeChannelType } from "./channel-type.js";
 export { default as Loader } from "./components/Loader.vue";
 export { default as AsyncState } from "./components/AsyncState.vue";
 export { default as ListAsyncState } from "./components/ListAsyncState.vue";
