@@ -29,7 +29,7 @@ import { CHANNEL_TYPES, CHANNEL_TYPE_SYMBOLS, normalizeChannelType } from "../ch
  * `widget`, `telegram`, `email`, `whatsapp`, `max` (see `channel-type.js`).
  * `web` and `widget` are origins of one public Web publication, never a
  * `Channel.provider`. Anything else (missing, future, hostile) renders a
- * neutral chat symbol plus the consumer `label` (or the raw value) as
+ * neutral help symbol plus the consumer `label` (or the raw value) as
  * escaped text — never another provider's mark.
  *
  * The package ships no language defaults: `label` is consumer-localized.

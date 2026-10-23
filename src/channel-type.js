@@ -5,8 +5,9 @@
 // only and imply no connector. No `mail` alias is accepted: the API does
 // not return one.
 //
-// `max` uses a neutral chat symbol: use of the official MAX logo is not
-// authorized here, so no brand mark is bundled.
+// `max` uses a neutral labelled "M" square symbol (visibly distinct from the
+// unknown fallback): use of the official MAX logo is not authorized here, so
+// no brand mark is bundled.
 export const CHANNEL_TYPE_SYMBOLS = Object.freeze({
   web: "web",
   widget: "code-tags",
@@ -14,7 +15,7 @@ export const CHANNEL_TYPE_SYMBOLS = Object.freeze({
   email: "email-outline",
   whatsapp: "whatsapp",
   max: "channel-max",
-  unknown: "message-outline",
+  unknown: "help-circle-outline",
 });
 
 export const CHANNEL_TYPES = Object.freeze(["web", "widget", "telegram", "email", "whatsapp", "max"]);

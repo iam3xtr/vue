@@ -29,6 +29,10 @@ describe("ChannelTypeIcon", () => {
     }
   });
 
+  it("max symbol differs from the unknown fallback", () => {
+    expect(CHANNEL_TYPE_SYMBOLS.max).not.toBe(CHANNEL_TYPE_SYMBOLS.unknown);
+  });
+
   it("icon-only known type is a named image", () => {
     const w = mount(ChannelTypeIcon, opts({ type: "telegram", label: "Telegram" }));
     expect(w.attributes("role")).toBe("img");
@@ -54,7 +58,7 @@ describe("ChannelTypeIcon", () => {
     const w = mount(ChannelTypeIcon, opts({ type: "<img src=x onerror=1>" }));
     expect(w.find("img").exists()).toBe(false);
     expect(w.text()).toBe("<img src=x onerror=1>");
-    expect(w.find("[data-icon]").attributes("data-icon")).toBe("message-outline");
+    expect(w.find("[data-icon]").attributes("data-icon")).toBe("help-circle-outline");
     expect(w.attributes("role")).toBeUndefined();
     const u = mount(ChannelTypeIcon, opts({ type: "unknown", label: "Other" }));
     expect(u.text()).toBe("Other");
