@@ -10,7 +10,7 @@
 export const CHANNEL_TYPE_SYMBOLS = Object.freeze({
   web: "web",
   widget: "code-tags",
-  telegram: "telegram",
+  telegram: "send",
   email: "email-outline",
   whatsapp: "whatsapp",
   max: "channel-max",

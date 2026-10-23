@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createSSRApp, h } from "vue";
 import { renderToString } from "vue/server-renderer";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 
 import ChannelTypeIcon from "../src/components/ChannelTypeIcon.vue";
 import { CHANNEL_TYPES, CHANNEL_TYPE_SYMBOLS } from "../src/channel-type.js";
@@ -19,12 +21,20 @@ describe("ChannelTypeIcon", () => {
     expect(new Set(symbols).size).toBe(6);
   });
 
+  it("every non-registry symbol resolves in the installed @mdi/font", () => {
+    const css = readFileSync(createRequire(import.meta.url).resolve("@mdi/font/css/materialdesignicons.css"), "utf8");
+    for (const symbol of Object.values(CHANNEL_TYPE_SYMBOLS)) {
+      if (symbol === "channel-max") continue;
+      expect(css, symbol).toContain(`.mdi-${symbol}::before`);
+    }
+  });
+
   it("icon-only known type is a named image", () => {
     const w = mount(ChannelTypeIcon, opts({ type: "telegram", label: "Telegram" }));
     expect(w.attributes("role")).toBe("img");
     expect(w.attributes("aria-label")).toBe("Telegram");
     expect(w.attributes("tabindex")).toBeUndefined();
-    expect(w.find("[data-icon]").attributes("data-icon")).toBe("telegram");
+    expect(w.find("[data-icon]").attributes("data-icon")).toBe("send");
   });
 
   it("normalizes case and whitespace", () => {
