@@ -336,7 +336,13 @@ let escapeConsumed = false;
 function onEscape(event) {
   // A fresh Escape keydown that is not consumed means any earlier consumed press is stale.
   escapeConsumed = false;
-  if (!isActive.value || composing(event)) return;
+  if (!isActive.value) return;
+  if (composing(event)) {
+    // IME Escape cancels composition only: hold it so its keyup cannot close via Buefy or a host.
+    event.stopPropagation();
+    escapeConsumed = true;
+    return;
+  }
   event.preventDefault();
   event.stopPropagation();
   escapeConsumed = true;

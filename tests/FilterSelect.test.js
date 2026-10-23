@@ -282,6 +282,21 @@ describe("FilterSelect search and historical values", () => {
     await field(wrapper).trigger("keydown", { key: "Escape", isComposing: true });
     expect(trigger(wrapper).attributes("aria-expanded")).toBe("true");
   });
+  it("holds a composing Escape through its keyup, then a plain Escape closes and returns focus", async () => {
+    const wrapper = render({ ...search, ...custom }, { attachTo: document.body }); await open(wrapper);
+    const host = vi.fn(); document.addEventListener("keyup", host);
+    try {
+      await field(wrapper).trigger("keydown", { key: "Escape", isComposing: true });
+      await field(wrapper).trigger("keyup", { key: "Escape" }); await settle();
+      expect(trigger(wrapper).attributes("aria-expanded")).toBe("true");
+      expect(host).not.toHaveBeenCalled();
+      await field(wrapper).trigger("keydown", { key: "Escape" }); await settle();
+      await field(wrapper).trigger("keyup", { key: "Escape" });
+      expect(trigger(wrapper).attributes("aria-expanded")).toBe("false");
+      expect(host).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(trigger(wrapper).element);
+    } finally { document.removeEventListener("keyup", host); wrapper.unmount(); }
+  });
   it("warns about missing search and custom copy", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     render({ searchable: true, allowCustom: true });
