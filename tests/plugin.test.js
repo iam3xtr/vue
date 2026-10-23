@@ -31,6 +31,7 @@ describe("trVue plugin", () => {
         "tr-list-async-state",
         "tr-copy-pre",
         "tr-toolbar",
+        "tr-filter-select",
         "tr-toolbar-dropdown",
         "tr-toolbar-search",
         "tr-mobile-filters",

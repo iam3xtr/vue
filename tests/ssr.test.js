@@ -24,6 +24,7 @@ describe("core entry point on the server", () => {
     expect(mod.FileDropTarget).toBeTruthy();
     expect(mod.FormDrawer).toBeTruthy();
     expect(mod.ModelSelect).toBeTruthy();
+    expect(mod.FilterSelect).toBeTruthy();
     expect(mod.ChatHistory).toBeTruthy();
     expect(mod.MessageComposer).toBeTruthy();
   });
@@ -91,6 +92,18 @@ describe("core entry point on the server", () => {
     });
     app.component("BIcon", { render: () => h("span") });
     await expect(renderToString(app)).resolves.toContain("tr-form-drawer__form");
+  });
+
+  it("server-renders FilterSelect without browser globals", async () => {
+    const { FilterSelect } = await import("../src/index.js");
+    const app = createSSRApp(FilterSelect, { options: [{ value: "a", label: "Alpha" }], ariaLabel: "Provider", placeholder: "All", resetLabel: "Reset" });
+    app.component("BDropdown", { setup(_, { slots }) { return () => h("div", [slots.trigger?.(), slots.default?.()]); } });
+    app.component("BDropdownItem", { setup(_, { slots }) { return () => h("div", slots.default?.()); } });
+    app.component("BIcon", { render: () => h("span") });
+    const html = await renderToString(app);
+    expect(html).toContain('aria-label="Provider"');
+    expect(html).toContain('role="listbox"');
+    expect(html).toContain("Alpha");
   });
 
   it("server-renders ChatHistory without throwing or needing Buefy", async () => {

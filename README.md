@@ -582,3 +582,34 @@ requires the Stage 4 release/semver decision and consumer migration before
 publication; no release version is selected here. Published 0.1.4 behavior is
 unchanged. Applications using omitted copy props must add localized values,
 including nested Toolbar and ListAsyncState calls, before upgrading.
+
+
+## FilterSelect (unpublished source candidate)
+
+Core export `FilterSelect`; plugin name `tr-filter-select`. Requires Buefy and
+`@iam3xtr/ui` `.tr-filter-select*` styles. Controlled non-searchable selection;
+search and custom entry are not implemented in this candidate.
+
+`options` is `{ value: string, label: string, disabled?: boolean }[]`. Non-empty
+string IDs are preserved without trimming/coercion; blank labels/invalid entries
+are ignored and first valid duplicate option wins. Single `v-model` is `string|null`
+(reset null); `multiple` uses `string[]` (reset []). Repeated model IDs display
+once in first-occurrence order. Multi additions append; deselection removes every
+occurrence. Emissions use fresh arrays; inputs/catalogs are never mutated.
+Unknown selected IDs survive catalog replacement (single shows the ID; multi shows
+count and lists labels/IDs in the tooltip). Opening/focusing/catalog updates do not
+select anything. Disabled/loading block opening and commits; flag changes close
+without selection updates. Single picks/reset return focus; multi picks stay open.
+
+Consumer-owned copy props: `ariaLabel`, `placeholder`, `resetLabel`, plus
+`selectedCountLabel` containing `{count}` in multiple mode, `emptyLabel` for an
+empty catalog and `loadingLabel` while loading. Missing names warn only in DEV.
+No package language, dictionary or locale service is used. Arrows/Home/End move
+option focus without selection; Enter/Space commits; Escape closes and contains
+the matching keyup so enclosing hosts do not also close. Buefy handles outside
+click/mobile presentation/Tab trapping. `useDropdownOverlay` adds opt-in
+`viewportBounds` with cleanup; its default remains false for existing callers.
+
+Publish compatible Vue and UI candidates before consumer adoption; no package
+version is selected or changed here. The new styles are not provided by published
+UI 0.1.4. Normal demo builds retain their existing exact pins.

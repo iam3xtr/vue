@@ -19,6 +19,7 @@ import AsyncState from "./components/AsyncState.vue";
 import ListAsyncState from "./components/ListAsyncState.vue";
 import CopyPre from "./components/CopyPre.vue";
 import Toolbar from "./components/Toolbar.vue";
+import FilterSelect from "./components/FilterSelect.vue";
 import ToolbarDropdown from "./components/ToolbarDropdown.vue";
 import ToolbarSearch from "./components/ToolbarSearch.vue";
 import MobileFilters from "./components/MobileFilters.vue";
@@ -45,6 +46,7 @@ export const trVueComponents = {
   "tr-list-async-state": ListAsyncState,
   "tr-copy-pre": CopyPre,
   "tr-toolbar": Toolbar,
+  "tr-filter-select": FilterSelect,
   "tr-toolbar-dropdown": ToolbarDropdown,
   "tr-toolbar-search": ToolbarSearch,
   "tr-mobile-filters": MobileFilters,

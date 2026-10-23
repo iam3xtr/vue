@@ -18,6 +18,7 @@ export { default as AsyncState } from "./components/AsyncState.vue";
 export { default as ListAsyncState } from "./components/ListAsyncState.vue";
 export { default as CopyPre } from "./components/CopyPre.vue";
 export { default as Toolbar } from "./components/Toolbar.vue";
+export { default as FilterSelect } from "./components/FilterSelect.vue";
 export { default as ToolbarDropdown } from "./components/ToolbarDropdown.vue";
 export { default as ToolbarSearch } from "./components/ToolbarSearch.vue";
 export { default as MobileFilters } from "./components/MobileFilters.vue";

@@ -45,7 +45,7 @@ const flushFrame = () => new Promise((r) => requestAnimationFrame(() => r(undefi
 // shape we depend on) and routes the four element refs to a fresh
 // composition tree. The harness itself owns the refs so tests can
 // override rects and assert on the resulting position class.
-function makeHarness({ appendToBody = false, fixed = false } = {}) {
+function makeHarness({ appendToBody = false, fixed = false, viewportBounds = false } = {}) {
   const refs = {
     wrapperRef: ref(null),
     triggerRef: ref(null),
@@ -64,6 +64,7 @@ function makeHarness({ appendToBody = false, fixed = false } = {}) {
         positionRef: refs.positionRef,
         appendToBody,
         fixed,
+        viewportBounds,
       });
       return () =>
         h("div", { ref: refs.wrapperRef, class: "dropdown" }, [
@@ -508,4 +509,32 @@ describe("resolveDropdownPlacement", () => {
       expect(resolveDropdownPlacement(anchor)).toBe("inline");
     },
   );
+});
+
+describe("opt-in viewport bounds", () => {
+  it.each([false, true])("clamps edges and restores styles (portal=%s)", async (appendToBody) => {
+    const { Harness, refs } = makeHarness({ viewportBounds: true, appendToBody });
+    const wrapper = mount(Harness, { attachTo: document.body });
+    const oldWidth = window.innerWidth; const oldHeight = window.innerHeight;
+    Object.defineProperty(window, "innerWidth", { value: 320, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 360, configurable: true });
+    try {
+      setRect(refs.triggerRef.value, { top: 330, left: 300, width: 20, height: 20 });
+      setRect(refs.menuRef.value, { width: 250, height: 300 });
+      refs.menuRef.value.style.maxHeight = "90vh";
+      refs.activeRef.value = true; await flushMicro(); await flushMicro();
+      const style = refs.menuRef.value.style;
+      expect(style.left).toBe(`${320 - 250 - 8}px`);
+      expect(parseFloat(style.top)).toBeGreaterThanOrEqual(8);
+      expect(parseFloat(style.top) + 300).toBeLessThanOrEqual(352);
+      expect(style.maxWidth).toBe("304px"); expect(style.maxHeight).toBe("344px");
+      refs.activeRef.value = false; await flushMicro();
+      expect(style.maxWidth).toBe(""); expect(style.maxHeight).toBe("90vh");
+      if (!appendToBody) expect(style.position).toBe("");
+    } finally {
+      wrapper.unmount();
+      Object.defineProperty(window, "innerWidth", { value: oldWidth, configurable: true });
+      Object.defineProperty(window, "innerHeight", { value: oldHeight, configurable: true });
+    }
+  });
 });

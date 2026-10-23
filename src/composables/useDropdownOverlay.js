@@ -189,6 +189,7 @@ const isMobileModalPresentation = (menu) => {
  * @property {import("vue").Ref<string>} positionRef — two-way binding to Buefy's `position` prop. Caller seeds it; composable writes the flipped value back so Buefy reactively re-renders the wrapper class.
  * @property {boolean|import("vue").Ref<boolean>|(() => boolean)} [appendToBody] — when true the composable also rewrites `top`/`left` (Buefy only writes them once on open) and lowers z-index via `!important` to the token scale (`--tr-z-dropdown`, below modal/drawer), so the portal cannot float above them; the menu's previous inline z-index is restored on close. Read on every open, so a caller can bind it to `resolveDropdownPlacement()`.
  * @property {boolean|import("vue").Ref<boolean>|(() => boolean)} [fixed] — inline mode only (ignored with `appendToBody`): when true the composable pins the menu in place with `position: fixed` and viewport `top`/`left` derived from the trigger, recomputed on scroll/resize, so a clipping scroll body of a modal/drawer cannot cut it off; the menu's previous inline positioning is restored on close. Read on every open, so a caller can bind it to `resolveDropdownPlacement() === "fixed"`.
+ * @property {boolean|import("vue").Ref<boolean>} [viewportBounds] — opt-in viewport clamp/scroll bounds. Pins non-mobile inline menus in place without moving their DOM; portal menus retain their portal. Existing callers default to false. Owned styles restore on close/unmount.
  * @property {number} [edgeGap] — minimum free space to keep before flipping (px). Default 8.
  * @property {import("vue").Ref<HTMLElement|null>} [portalRef] — for body-portal mode: the outer body wrapper Buefy creates (`<div style="position:absolute">`). The composable can use it to find the menu by walking up from the portal wrapper when `menuRef` is not yet populated. Optional: when omitted, the composable relies on `menuRef` alone.
  */
@@ -210,6 +211,7 @@ export function useDropdownOverlay(options) {
     positionRef,
     appendToBody = false,
     fixed = false,
+    viewportBounds = false,
     edgeGap = VIEWPORT_EDGE_GAP,
     portalRef,
   } = options;
@@ -217,10 +219,34 @@ export function useDropdownOverlay(options) {
   // The menu's inline `z-index` before the first override of this open
   // (Buefy's literal `"99"` from `updateAppendToBody`), restored on close.
   // `null` while nothing has been overridden.
+  let disposed = false;
   let savedZIndex = null;
   // The menu's inline positioning before the fixed mode took it over,
   // restored on close. `null` while the fixed mode is not applied.
   let savedFixedStyle = null;
+  let savedBounds = null;
+  const BOUND_PROPS = ["max-width", "max-height", "overflow-y", "box-sizing", "top", "left"];
+  const restoreBounds = () => {
+    const menu = menuRef.value;
+    if (!menu || !savedBounds) return;
+    for (const prop of BOUND_PROPS) {
+      const saved = savedBounds[prop];
+      if (saved.value) menu.style.setProperty(prop, saved.value, saved.priority);
+      else menu.style.removeProperty(prop);
+    }
+    savedBounds = null;
+  };
+  const applyBounds = () => {
+    const menu = menuRef.value;
+    if (!menu || !toValue(viewportBounds) || typeof window === "undefined") return;
+    if (!savedBounds) savedBounds = Object.fromEntries(BOUND_PROPS.map((prop) => [prop, {
+      value: menu.style.getPropertyValue(prop), priority: menu.style.getPropertyPriority(prop),
+    }]));
+    menu.style.setProperty("max-width", `${Math.max(0, window.innerWidth - 2 * edgeGap)}px`);
+    menu.style.setProperty("max-height", `${Math.max(0, window.innerHeight - 2 * edgeGap)}px`);
+    menu.style.setProperty("overflow-y", "auto");
+    menu.style.setProperty("box-sizing", "border-box");
+  };
   let detachFns = [];
   let cancelFrame = null;
   let listenersAttached = false;
@@ -381,6 +407,10 @@ export function useDropdownOverlay(options) {
     if (position.endsWith("-left")) {
       left -= menuW - triggerW;
     }
+    if (toValue(viewportBounds) && typeof window !== "undefined") {
+      top = Math.max(edgeGap, Math.min(top, window.innerHeight - menuH - edgeGap));
+      left = Math.max(edgeGap, Math.min(left, window.innerWidth - menuW - edgeGap));
+    }
     return { top, left };
   };
 
@@ -449,11 +479,11 @@ export function useDropdownOverlay(options) {
   const applyNow = () => {
     const trigger = triggerRef.value;
     const menu = menuRef.value;
-    if (!trigger || !menu) return;
+    if (!trigger || !menu || disposed || (toValue(viewportBounds) && !activeRef.value)) return;
 
     applyMenuMarker();
     const portal = !!toValue(appendToBody);
-    const pinned = !portal && !!toValue(fixed);
+    const pinned = !portal && (!!toValue(fixed) || !!toValue(viewportBounds));
     if (portal) {
       applyPortalMarker();
       applyZIndex();
@@ -462,8 +492,10 @@ export function useDropdownOverlay(options) {
     // flipping or rewriting coordinates there would fight its CSS.
     if (isMobileModal(menu)) {
       restoreFixed();
+      restoreBounds();
       return;
     }
+    applyBounds();
 
     const position = positionRef.value;
     const m = measure();
@@ -537,6 +569,7 @@ export function useDropdownOverlay(options) {
     // `nextTick`. We chain one more `nextTick` here to be safe across
     // call sites that populate refs synchronously vs. via a watcher.
     await nextTick();
+    if (disposed || !activeRef.value) return;
     attachListeners();
     apply();
     startPortalLoop();
@@ -547,6 +580,7 @@ export function useDropdownOverlay(options) {
     removeMenuMarker();
     restoreZIndex();
     restoreFixed();
+    restoreBounds();
     removePortalMarkerOnce();
   };
 
@@ -563,6 +597,7 @@ export function useDropdownOverlay(options) {
   }, { immediate: true });
 
   onBeforeUnmount(() => {
+    disposed = true;
     onClose();
   });
 
