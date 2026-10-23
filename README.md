@@ -43,6 +43,16 @@ import { trVue } from "@iam3xtr/vue/plugin";
   импорты из них продолжают не требовать Vue Router независимо от того,
   используется ли где-то в приложении `trVue`.
 
+## Совместимость
+
+Исходники объявляют peers Vue `^3.5.0`, Buefy `^3.0.0`, UI `^0.1.4`
+и optional Router `^4.6.0 || ^5.0.0`. Router нужен navigation/plugin,
+core работает без него. Расширение Router 5 ещё не опубликовано:
+registry-версия `0.1.4` остаётся на Router `^4.6.0`. Версии Vue и UI
+независимы; нижняя граница UI повышается только при новом обязательном
+style/token/export-контракте, а не при каждом UI patch. Проверенные exact
+комбинации и registry gate описаны в release process UI Kit.
+
 ## Подключение
 
 ```js
@@ -505,6 +515,10 @@ provideIconRegistry(app, { anthropic: anthropicIcon /* , ... */ });
 
 ## Разработка
 
+Для build/test/pack нужен последний security patch Node 24 LTS (минимум
+24.15.0) и npm 11; `devEngines` проверяет эту политику отдельно от runtime
+публикуемой библиотеки.
+
 ```bash
 npm install   # подтягивает vue/buefy/vue-router как devDependencies, @iam3xtr/ui из ../ui
 npm test      # компонентные, accessibility, listener-cleanup, SSR и контрактные тесты
@@ -519,7 +533,7 @@ npm test      # компонентные, accessibility, listener-cleanup, SSR �
 релизный процесс — порядок публикации, таблица рекомендуемой пары,
 тарбол/registry consumer-матрица, восстановление после partial publish и
 rollback — задокументирован одним нормативным текстом в
-[`docs/release-process.md`](https://github.com/iam3xtr/trickster-ui-kit/blob/main/docs/release-process.md)
+[`docs/release-process.md`](https://github.com/iam3xtr/ui.3xtr.im/blob/main/docs/release-process.md)
 в репозитории UI Kit; здесь не дублируется.
 
 Релиз оформляется пушем тега `vX.Y.Z`, точно совпадающего с `version` из
