@@ -4,6 +4,18 @@
     "description": "Reusable Vue layer for 3xtr.im applications",
     "license": "MIT",
     "type": "module",
+    "devEngines": {
+        "runtime": {
+            "name": "node",
+            "version": "^24.15.0",
+            "onFail": "error"
+        },
+        "packageManager": {
+            "name": "npm",
+            "version": "^11.0.0",
+            "onFail": "error"
+        }
+    },
     "files": [
         "src",
         "README.md",
