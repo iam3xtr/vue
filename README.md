@@ -143,16 +143,16 @@ default-реестр без этого шага (см. "Реестр иконо�
 | Компонент | Пропсы | События | Слоты | Требует |
 | --- | --- | --- | --- | --- |
 | `Icon` | `name` (legacy), `icon` (Buefy-совместимый алиас `name`), `size` (по умолчанию `24`) | — | default (высший приоритет — см. ниже) | `@iam3xtr/ui` (встроенный default-реестр); Buefy (`b-icon`) опционально как MDI fallback |
-| `Loader` | `size` (`inline"\|"section"\|"screen"`, по умолчанию `"section"`), `label` (по умолчанию `"Загрузка"`) | — | — | `@iam3xtr/ui` (инлайнит его SVG-марки лоадера) |
+| `Loader` | `size` (`inline"\|"section"\|"screen"`, по умолчанию `"section"`), `label` (consumer-owned copy, без default) | — | — | `@iam3xtr/ui` (инлайнит его SVG-марки лоадера) |
 | `AsyncState` | `variant` (обязателен, один из `loading/empty/no-results/error/permission-denied`), `icon`, `title`, `message` | — | default (действия) | Buefy (`b-icon`) при переданном `icon` |
-| `ListAsyncState` | `loading`, `error`/`errorIcon`/`errorTitle`/`errorMessage`, `empty`/`emptyIcon`/`emptyTitle`/`emptyMessage`, `noResults`/`noResultsIcon`/`noResultsTitle`/`noResultsMessage` | — | default, `error-action`, `empty-action` | транзитивно Buefy через `AsyncState` |
-| `CopyPre` | `text`, `buttonLabel` (по умолчанию `"Копировать"`), `copiedLabel` (по умолчанию `"Скопировано!"`), `title`, `disabled` | — | default | Buefy (`b-icon`) |
-| `Toolbar` | `search`, `searchPlaceholder`, `searchAriaLabel`, `filtersActive` | `update:search`, `shortcut` | `filters`, `actions`/default | Buefy, транзитивно |
+| `ListAsyncState` | `loading`, `loadingLabel`, `error`/`errorIcon`/`errorTitle`/`errorMessage`, `empty`/`emptyIcon`/`emptyTitle`/`emptyMessage`, `noResults`/`noResultsIcon`/`noResultsTitle`/`noResultsMessage` | — | default, `error-action`, `empty-action` | транзитивно Buefy через `AsyncState` |
+| `CopyPre` | `text`, `buttonLabel` (consumer-owned copy, без default), `copiedLabel` (consumer-owned copy, без default), `title`, `disabled` | — | default | Buefy (`b-icon`) |
+| `Toolbar` | `search`, `searchPlaceholder`, `searchAriaLabel`, `filtersActive`, `filtersAriaLabel`, `filtersTitle` | `update:search`, `shortcut` | `filters`, `actions`/default | Buefy, транзитивно |
 | `ToolbarDropdown` | `options` (обязателен), `allLabel` (обязателен), `ariaLabel`; `v-model` (обязателен) | `update:modelValue` | — | Buefy (`b-dropdown`) |
 | `ToolbarSearch` | `placeholder` (обязателен), `ariaLabel`, `priority` (`"navbar"\|"page"`); `v-model` (обязателен) | `update:modelValue`, `shortcut` | — | Buefy (`b-input`) |
-| `MobileFilters` | `active`, `triggerAriaLabel` (по умолчанию `"Открыть фильтры"`), `triggerTitle` (по умолчанию `"Фильтры"`) | — | default | Buefy (`b-dropdown`, `b-button`) |
+| `MobileFilters` | `active`, `triggerAriaLabel` (consumer-owned copy, без default), `triggerTitle` (consumer-owned copy, без default) | — | default | Buefy (`b-dropdown`, `b-button`) |
 | `NavbarMenu` | — (читает injection `navbarMenuKey`) | — | default | — |
-| `FileDropTarget` | `disabled`, `multiple` (по умолчанию `true`), `accept` (расширения/MIME/`image/*`, только клиентская подсказка), `overlayLabel` (по умолчанию `"Отпустите файлы, чтобы загрузить"`) | `files` (`File[]`, только на реальном drop файлов) | default | — |
+| `FileDropTarget` | `disabled`, `multiple` (по умолчанию `true`), `accept` (расширения/MIME/`image/*`, только клиентская подсказка), `overlayLabel` (consumer-owned copy, без default) | `files` (`File[]`, только на реальном drop файлов) | default | — |
 | `FormDrawer` | `v-model`, `title`, `busy`, `disabled`, `closeAriaLabel`, `beforeClose`, `shell`, `width` | `update:modelValue`, native `submit` | default, `footer`, `shell`; scoped `requestClose` | Buefy (`b-sidebar`, `b-icon`) |
 | `ModelSelect` | `mode` (`"model"` / `"byok"` / `"both"`), `models` (обязателен, `[{id,name,provider?}]`), `recommendedModels`, `searchResults`, `loading`, `error`, `invalid`, `disabled`, `inputId`, `triggerPlaceholder`, `searchPlaceholder`, `triggerAriaLabel`, `searchAriaLabel`, `triggerTitle`, `emptyLabel`, `loadingLabel`, `errorLabel`, `switchLabel` / `switchAriaLabel` (только `mode === "both"`), `freeformActionLabel` / `freeformActionAriaLabel` / `freeformHint` / `freeformErrorLabel` (BYOK scope); `v-model:modelId`, `v-model:byokModelId`, `v-model:providerModelId`, `v-model:useOwnApiKey` (только `mode === "both"`) | `update:modelId`, `update:byokModelId`, `update:providerModelId`, `update:useOwnApiKey`, `update:query` | `byok-key` (consumer-owned UI ключа; пакет не читает и не хранит значение) | Buefy (`b-dropdown`, `b-button`, `b-autocomplete`) |
 | `ChatHistory` | `messages` (обязателен, `[{id,text,outgoing}]`), `ariaLabel`, `ariaLive` (по умолчанию `"polite"`) | — | `body`, `metadata`, `status` (scoped `{ message }`), `empty` | `@iam3xtr/ui` theme |
@@ -197,16 +197,15 @@ resolver после mount корневого `.dropdown`: он возвраща�
 перемещает menu в `body`, поэтому refs на menu и wrapper надо обновить после
 открытия. Импорт entrypoint не требует browser globals.
 
-Каждый текстовый пропс выше по умолчанию на русском — по кабинету-эталону,
-из которого извлечён этот пакет; передавайте свои строки для локализации.
+Все текстовые props выше принадлежат consumer; передавайте локализованные
+строки без package language fallback.
 Полный doc-комментарий (заметки о доступности, гарантии SSR, точная
 разметка) — в `.vue`-файле каждого компонента.
 
 Для `AsyncState` с `variant="loading"` `title`/`message` не рендерятся как
 видимый текст рядом со спиннером — вместо этого они передаются во внутренний
 `Loader` как `label` (только accessible name): `title` в приоритете,
-`message` — fallback, а без обоих сохраняется документированный default
-`Loader`. Передавайте переведённые строки — компонент не вводит собственную
+`message` — fallback; без обоих Loader сообщает об отсутствующем имени в development. Передавайте переведённые строки — компонент не вводит собственную
 package locale.
 
 `FileDropTarget` — переносимая drop-поверхность над произвольным
@@ -232,7 +231,7 @@ upload, progress, retry, cancel или API — эмитит один `files` `Fi
 
 Native режим по умолчанию сохраняет один HTML form и событие `submit`, подавляемое при busy/disabled. `shell` включает оболочку для consumer-owned формы (например, vee-validate): package form отсутствует, событие submit пакета не эмитится. Slot `shell` получает `content` — компонент body/footer — и `busy`, `disabled`, `requestClose`. Default/footer slots сохраняются и получают тот же scope. Внешняя форма должна быть прямым ребёнком shell slot; дополнительная обёртка нарушит flex/scroll layout. Validation, блокировка submit в shell, dirty state и API принадлежат consumer. Пакет не зависит от vee-validate.
 
-`width` — CSS length, например `42rem`, передаваемый через `--tr-form-drawer-width`. По умолчанию 420px; тема ограничивает ширину viewport и сохраняет mobile fullscreen. Body прокручивается отдельно от header/footer. Передавайте локализованный `closeAriaLabel`; старый default сохранён для совместимости.
+`width` — CSS length, например `42rem`, передаваемый через `--tr-form-drawer-width`. По умолчанию 420px; тема ограничивает ширину viewport и сохраняет mobile fullscreen. Body прокручивается отдельно от header/footer. Передавайте локализованный `closeAriaLabel`; source candidate не содержит language default; missing/blank closeAriaLabel вызывает development warning.
 
 Пример шаблона (`Form` импортируется consumer из vee-validate, `FormDrawer` — из `@iam3xtr/vue`):
 
@@ -419,9 +418,9 @@ consumer явно переносит их поведение в свой adapter
 
 | Компонент | Пропсы | Требует |
 | --- | --- | --- |
-| `PageHeader` | `title`, `subtitle`, `back` (`{ to, title? }`) | Vue Router; Buefy (`b-icon`) при переданном `back` |
-| `NavbarTabs` | `items` (обязателен, `{ label, to }[]`), `ariaLabel` (по умолчанию `"Навигационные вкладки"`), `prevLabel`/`nextLabel` (доступные имена стрелок, по умолчанию `"Предыдущие вкладки"`/`"Следующие вкладки"`). Занимает свободную ширину контейнера; стрелки появляются только при фактическом переполнении и прокручивают к следующей скрытой вкладке, активная вкладка остаётся видимой после перехода и resize | Vue Router |
-| `TariffSummaryCard` | `tariff` (обязателен), `label` (по умолчанию `"Тариф"`), `to` (опционально — без него рендерится обычный `div`, с ним — `RouterLink`) | Buefy (`b-progress`); Vue Router только если передан `to` |
+| `PageHeader` | `title`, `subtitle`, `back` (`{ to, title }`) | Vue Router; Buefy (`b-icon`) при переданном `back` |
+| `NavbarTabs` | `items` (обязателен, `{ label, to }[]`), `ariaLabel`, `prevLabel`/`nextLabel` (обязательные локализованные имена навигации и стрелок). Занимает свободную ширину контейнера; стрелки появляются только при фактическом переполнении и прокручивают к следующей скрытой вкладке, активная вкладка остаётся видимой после перехода и resize | Vue Router |
+| `TariffSummaryCard` | `tariff` (обязателен), `label` (consumer-owned copy, без default), `to` (опционально — без него рендерится обычный `div`, с ним — `RouterLink`) | Buefy (`b-progress`); Vue Router только если передан `to` |
 
 ## Реестр иконок
 
@@ -550,3 +549,36 @@ rollback — задокументирован одним нормативным 
 `.ui-compat-ref` — это требует отдельного read-only cross-repo токена; полное
 разграничение кредов и диагностика отказа доступа — в
 `docs/release-process.md`, здесь не дублируется.
+
+
+## Consumer copy contract (unpublished source candidate)
+
+All visible and accessible copy belongs to the consumer. Pass localized strings,
+never locale keys. No package dictionaries, RU/EN fallback or global Buefy locale
+mutation is used. Existing prop names remain; missing/blank required names produce
+only development diagnostics, never replacement text. Consumers must provide:
+
+- `Loader.label`; `AsyncState` loading `title` or `message`;
+  `ListAsyncState.loadingLabel` when loading.
+- `CopyPre.buttonLabel` and `copiedLabel`; `FileDropTarget.overlayLabel`;
+  `FormDrawer.closeAriaLabel`; `MobileFilters.triggerAriaLabel`.
+- `Toolbar.filtersAriaLabel` with its filters slot (forwarded to MobileFilters);
+  `filtersTitle` is an optional tooltip. Search uses `searchAriaLabel` or
+  non-empty `searchPlaceholder`.
+- `ToolbarSearch.ariaLabel` or non-empty `placeholder`; `ToolbarDropdown.allLabel`
+  and optionally its separate `ariaLabel`.
+- `NavbarTabs.ariaLabel`, `prevLabel`, `nextLabel`; `PageHeader.back.title` when
+  rendering a back link.
+- `MessageComposer.textareaAriaLabel`, `submitAriaLabel`; `ModelSelect` trigger
+  and search aria labels plus switch/freeform aria labels or visible action text.
+  A trigger may instead use a native consumer `<label for>` matching `inputId`.
+
+Other state text, headings, hints and tooltips remain optional consumer text.
+`Icon` is decorative by default; use `role="img"` and consumer `aria-label` or
+`aria-labelledby` for a meaningful icon. The registry key is never a spoken name.
+
+Removing omitted-prop defaults is an **incompatible change**. This candidate
+requires the Stage 4 release/semver decision and consumer migration before
+publication; no release version is selected here. Published 0.1.4 behavior is
+unchanged. Applications using omitted copy props must add localized values,
+including nested Toolbar and ListAsyncState calls, before upgrading.

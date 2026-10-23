@@ -48,14 +48,14 @@ describe("PageHeader", () => {
 });
 
 describe("NavbarTabs", () => {
-  it("renders one RouterLink per item and a default Russian aria-label", async () => {
+  it("renders one RouterLink per item without an invented navigation name", async () => {
     const router = makeRouter();
     const wrapper = mount(NavbarTabs, {
       props: { items: [{ label: "Overview", to: { name: "home" } }] },
       global: { plugins: [router] },
     });
     await router.isReady();
-    expect(wrapper.attributes("aria-label")).toBe("Навигационные вкладки");
+    expect(wrapper.attributes("aria-label")).toBeUndefined();
     expect(wrapper.findAll(".tr-navbar-tabs__link")).toHaveLength(1);
   });
 
@@ -161,8 +161,8 @@ describe("NavbarTabs", () => {
     expect(wrapper.classes()).toContain("is-overflowing");
     const prev = wrapper.find(".tr-navbar-tabs__arrow--prev");
     const next = wrapper.find(".tr-navbar-tabs__arrow--next");
-    expect(prev.attributes("aria-label")).toBe("Предыдущие вкладки");
-    expect(next.attributes("aria-label")).toBe("Следующие вкладки");
+    expect(prev.attributes("aria-label")).toBeUndefined();
+    expect(next.attributes("aria-label")).toBeUndefined();
     expect(prev.attributes("type")).toBe("button");
     expect(prev.element.disabled).toBe(true);
     expect(next.element.disabled).toBe(false);

@@ -184,6 +184,7 @@
 </template>
 
 <script setup>
+import { useCopyDiagnostics } from "../composables/useCopyDiagnostics.js";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from "vue";
 
 import Icon from "./Icon.vue";
@@ -699,5 +700,14 @@ onBeforeUnmount(() => {
     clearTimeout(focusOutTimer);
     focusOutTimer = null;
   }
+});
+
+// Consumer-owned names; visible switch/action text is also a valid name.
+// A non-empty inputId documents the consumer's native <label for> naming path.
+useCopyDiagnostics("ModelSelect", {
+  triggerAriaLabel: () => props.triggerAriaLabel || props.inputId,
+  searchAriaLabel: () => props.searchAriaLabel,
+  "switchAriaLabel or switchLabel": () => props.mode !== "both" || props.switchAriaLabel || props.switchLabel,
+  "freeformActionAriaLabel or freeformActionLabel": () => !freeformVisible.value || props.freeformActionAriaLabel || props.freeformActionLabel,
 });
 </script>

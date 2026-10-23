@@ -18,7 +18,12 @@
          trigger/panel is the only way to reach them, so the same filters
          slot is rendered a second time here instead of wrapping to a
          second toolbar row. -->
-    <MobileFilters v-if="$slots.filters" :active="filtersActive">
+    <MobileFilters
+      v-if="$slots.filters"
+      :active="filtersActive"
+      :trigger-aria-label="filtersAriaLabel"
+      :trigger-title="filtersTitle"
+    >
       <slot name="filters" />
     </MobileFilters>
 
@@ -71,6 +76,9 @@ const props = defineProps({
     type: String,
     default: undefined,
   },
+  /** Required localized mobile trigger name when using the filters slot; tooltip is optional. */
+  filtersAriaLabel: String,
+  filtersTitle: String,
   filtersActive: {
     type: Boolean,
     default: false,

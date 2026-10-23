@@ -6,6 +6,7 @@
         :to="back?.to || './'"
         class="page-header__back"
         :title="back?.title"
+        :aria-label="back?.title"
       >
         <b-icon icon="chevron-left" />
       </RouterLink>
@@ -28,6 +29,7 @@
 </template>
 
 <script setup>
+import { useCopyDiagnostics } from "../../composables/useCopyDiagnostics.js";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 
@@ -46,7 +48,7 @@ import { RouterLink } from "vue-router";
  * shown.
  *
  * Props: `title`, `subtitle` (both String, default `""`), `back`
- * (`{ to: RouteLocationRaw, title?: string }`, default `null`).
+ * (`{ to: RouteLocationRaw, title: string }`, default `null`).
  * Slot: default — action buttons rendered on the right.
  *
  * Requires Buefy (`b-icon`, only rendered when `back` is set) and Vue
@@ -61,7 +63,7 @@ const props = defineProps({
     type: String,
     default: "",
   },
-  /** @type {import("vue").PropType<{ to: import("vue-router").RouteLocationRaw, title?: string }>} */
+  /** @type {import("vue").PropType<{ to: import("vue-router").RouteLocationRaw, title: string }>} */
   back: {
     type: Object,
     default: null,
@@ -69,4 +71,8 @@ const props = defineProps({
 });
 
 const loading = computed(() => !props.title && !props.subtitle);
+
+useCopyDiagnostics("PageHeader", {
+  "back.title": () => !props.back || props.back.title,
+});
 </script>

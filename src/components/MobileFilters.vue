@@ -27,6 +27,7 @@
 </template>
 
 <script setup>
+import { useCopyDiagnostics } from "../composables/useCopyDiagnostics.js";
 import { computed, nextTick, onMounted, ref, useTemplateRef } from "vue";
 
 import {
@@ -44,8 +45,8 @@ import {
  * Props: `active` (Boolean — flags the trigger as "has active filters";
  * this component has no visibility into the slot content's own state,
  * so the caller computes it), `triggerAriaLabel`/`triggerTitle`
- * (accessible name and tooltip for the trigger button — override for a
- * non-Russian consumer).
+ * (required accessible name and optional tooltip, both consumer-owned;
+ * missing triggerAriaLabel warns in development).
  * Slot: default — the filters panel content.
  *
  * Placement follows `resolveDropdownPlacement`: the panel stays inline
@@ -62,18 +63,18 @@ import {
  *
  * Requires Buefy (`b-dropdown`, `b-button`).
  */
-defineProps({
+const props = defineProps({
   active: {
     type: Boolean,
     default: false,
   },
   triggerAriaLabel: {
     type: String,
-    default: "Открыть фильтры",
+    default: undefined,
   },
   triggerTitle: {
     type: String,
-    default: "Фильтры",
+    default: undefined,
   },
 });
 
@@ -149,4 +150,8 @@ const onActiveChange = async (next) => {
   await nextTick();
   refreshRefs();
 };
+
+useCopyDiagnostics("MobileFilters", {
+  "triggerAriaLabel": () => props.triggerAriaLabel,
+});
 </script>

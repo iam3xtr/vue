@@ -82,11 +82,11 @@ describe("ToolbarDropdown", () => {
 });
 
 describe("MobileFilters", () => {
-  it("exposes overridable, non-empty default trigger labels", () => {
+  it("does not invent trigger copy", () => {
     const wrapper = mount(MobileFilters, { global: global_ });
     const trigger = wrapper.find(".tr-mobile-filters__trigger");
-    expect(trigger.attributes("aria-label")).toBe("Открыть фильтры");
-    expect(trigger.attributes("title")).toBe("Фильтры");
+    expect(trigger.attributes("aria-label")).toBeUndefined();
+    expect(trigger.attributes("title")).toBeUndefined();
   });
 
   it("accepts custom labels", () => {

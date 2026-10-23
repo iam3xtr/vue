@@ -24,7 +24,7 @@ describe("Loader", () => {
     const wrapper = mount(Loader);
     expect(wrapper.attributes("role")).toBe("status");
     expect(wrapper.attributes("aria-live")).toBe("polite");
-    expect(wrapper.attributes("aria-label")).toBe("Загрузка");
+    expect(wrapper.attributes("aria-label")).toBeUndefined();
     expect(wrapper.classes()).toContain("tr-loader--section");
   });
 

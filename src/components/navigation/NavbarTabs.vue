@@ -55,6 +55,7 @@
 </template>
 
 <script setup>
+import { useCopyDiagnostics } from "../../composables/useCopyDiagnostics.js";
 import {
   computed, nextTick, onBeforeUnmount, onMounted, ref, watch,
 } from "vue";
@@ -81,10 +82,9 @@ import { RouterLink, useRoute } from "vue-router";
  * scrolled into view after a route change and after a resize.
  *
  * Props: `items` (required — array of `{ label, to }`), `ariaLabel`
- * (default `"Навигационные вкладки"`), `prevLabel` (default
- * `"Предыдущие вкладки"`) and `nextLabel` (default `"Следующие вкладки"`)
- * — accessible names of the arrow buttons; override all three for a
- * non-Russian consumer.
+ * (required navigation name), `prevLabel` and `nextLabel`
+ * (required arrow names). Supply localized consumer copy; missing names
+ * warn in development.
  * Slots: none.
  *
  * Requires Vue Router.
@@ -97,15 +97,15 @@ const props = defineProps({
   },
   ariaLabel: {
     type: String,
-    default: "Навигационные вкладки",
+    default: undefined,
   },
   prevLabel: {
     type: String,
-    default: "Предыдущие вкладки",
+    default: undefined,
   },
   nextLabel: {
     type: String,
-    default: "Следующие вкладки",
+    default: undefined,
   },
 });
 
@@ -297,5 +297,11 @@ onBeforeUnmount(() => {
   } else if (typeof window !== "undefined") {
     window.removeEventListener("resize", handleResize);
   }
+});
+
+useCopyDiagnostics("NavbarTabs", {
+  "ariaLabel": () => props.ariaLabel,
+  "prevLabel": () => props.prevLabel,
+  "nextLabel": () => props.nextLabel,
 });
 </script>

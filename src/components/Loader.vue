@@ -11,6 +11,7 @@
 </template>
 
 <script setup>
+import { useCopyDiagnostics } from "../composables/useCopyDiagnostics.js";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
 import loaderMarkRaw from "@iam3xtr/ui/assets/loader-mono.svg?raw";
@@ -33,12 +34,12 @@ import loaderMarkStaticRaw from "@iam3xtr/ui/assets/loader-mono-static.svg?raw";
  *
  * Props: `size` (`"inline" | "section" | "screen"`, default `"section"`),
  * `label` (accessible name announced via `aria-label`/`role="status"`,
- * default `"Загрузка"` — override for a non-Russian consumer). Slots: none.
+ * required localized consumer copy; missing/blank text warns in development). Slots: none.
  *
  * SSR-safe: `window.matchMedia` is read only inside `onMounted`, and the
  * listener it attaches is removed in `onBeforeUnmount`.
  */
-defineProps({
+const props = defineProps({
   size: {
     type: String,
     default: "section",
@@ -46,7 +47,7 @@ defineProps({
   },
   label: {
     type: String,
-    default: "Загрузка",
+    default: undefined,
   },
 });
 
@@ -70,4 +71,8 @@ onBeforeUnmount(() => {
 });
 
 const mark = computed(() => (prefersReducedMotion.value ? loaderMarkStaticRaw : loaderMarkRaw));
+
+useCopyDiagnostics("Loader", {
+  "label": () => props.label,
+});
 </script>

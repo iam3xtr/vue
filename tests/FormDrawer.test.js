@@ -50,7 +50,7 @@ describe("FormDrawer", () => {
 
   it("gives the close button an accessible name, overridable for localization", () => {
     const wrapper = mountDrawer({ props: { modelValue: true } });
-    expect(wrapper.find(".tr-form-drawer__close").attributes("aria-label")).toBe("Закрыть");
+    expect(wrapper.find(".tr-form-drawer__close").attributes("aria-label")).toBeUndefined();
 
     const custom = mountDrawer({
       props: { modelValue: true, closeAriaLabel: "Close" },

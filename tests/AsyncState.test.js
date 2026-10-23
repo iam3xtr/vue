@@ -15,9 +15,9 @@ describe("AsyncState", () => {
     expect(wrapper.attributes("aria-live")).toBeUndefined();
   });
 
-  it("loading variant with no title/message keeps Loader's own default label", () => {
+  it("loading variant with no title/message does not invent a loading label", () => {
     const wrapper = mount(AsyncState, { props: { variant: "loading" }, global: global_ });
-    expect(wrapper.find(".tr-loader").attributes("aria-label")).toBe("Загрузка");
+    expect(wrapper.find(".tr-loader").attributes("aria-label")).toBeUndefined();
   });
 
   it("loading variant passes title to Loader's label, not as visible text", () => {

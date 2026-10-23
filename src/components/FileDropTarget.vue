@@ -21,6 +21,7 @@
 </template>
 
 <script setup>
+import { useCopyDiagnostics } from "../composables/useCopyDiagnostics.js";
 import { computed, ref } from "vue";
 
 /**
@@ -59,8 +60,8 @@ import { computed, ref } from "vue";
  * the first accepted file), `accept` (String, optional comma-separated list
  * of extensions (`.pdf`), exact MIME types (`application/pdf`) or MIME
  * wildcards (`image/*`); omit to accept every dropped file), `overlayLabel`
- * (String — the overlay's accessible/visible text, default in Russian per
- * this kit's convention; override for a non-Russian consumer).
+ * (String — the overlay's accessible/visible text, required consumer copy,
+ * with a development warning when omitted).
  * Emits: `files` (`File[]`, always non-empty).
  * Slot: default — the interactive content the drop surface sits over.
  *
@@ -82,7 +83,7 @@ const props = defineProps({
   },
   overlayLabel: {
     type: String,
-    default: "Отпустите файлы, чтобы загрузить",
+    default: undefined,
   },
 });
 
@@ -141,4 +142,8 @@ function onDrop(event) {
 
   emit("files", props.multiple ? accepted : accepted.slice(0, 1));
 }
+
+useCopyDiagnostics("FileDropTarget", {
+  "overlayLabel": () => props.disabled || props.overlayLabel,
+});
 </script>

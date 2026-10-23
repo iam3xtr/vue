@@ -1,6 +1,7 @@
 <template>
   <span
     v-if="hasSlotContent"
+    :aria-hidden="iconAriaHidden()"
     class="icon tr-icon"
     :style="pxSize !== '24px' ? { width: pxSize, height: pxSize } : ''"
   >
@@ -9,11 +10,13 @@
   <component
     :is="svgComponent"
     v-else-if="svgComponent && !isMarkup"
+    :aria-hidden="iconAriaHidden()"
     class="icon tr-icon"
     :style="pxSize !== '24px' ? { width: pxSize, height: pxSize } : ''"
   />
   <span
     v-else-if="isMarkup"
+    :aria-hidden="iconAriaHidden()"
     class="icon tr-icon"
     :style="{ width: pxSize, height: pxSize }"
     v-html="svgComponent"
@@ -22,6 +25,7 @@
     :is="buefyIconComponent"
     v-else-if="showBuefyFallback"
     :icon="effectiveKey"
+    :aria-hidden="iconAriaHidden()"
     class="icon tr-icon"
     :style="pxSize !== '24px' ? { width: pxSize, height: pxSize } : ''"
   />
@@ -34,7 +38,7 @@
 </template>
 
 <script setup>
-import { Comment, Text, computed, getCurrentInstance, inject, useSlots, watchEffect } from "vue";
+import { Comment, Text, computed, getCurrentInstance, inject, useAttrs, useSlots, watchEffect } from "vue";
 
 import { icons as uiIconRegistry } from "@iam3xtr/ui/icons";
 
@@ -87,6 +91,10 @@ import { iconRegistryKey } from "../icon-registry.js";
  * or repeats `class` explicitly, since either would just merge the same
  * `class` string into itself twice.
  *
+ * Icons without aria-label/aria-labelledby are decorative (aria-hidden=true).
+ * Supply role="img" and localized aria-label/aria-labelledby for meaningful icons.
+ * Unresolved placeholders are always decorative.
+ *
  * Props: `name` (registry key, legacy), `icon` (registry key, Buefy-style
  * alias for `name`), `size` (number in px, or any CSS length string;
  * default `24`).
@@ -107,6 +115,11 @@ const props = defineProps({
   },
 });
 
+const attrs = useAttrs();
+// Read attrs during render: Vue updates useAttrs, but it is not reactive.
+function iconAriaHidden() {
+  return attrs["aria-hidden"] ?? (attrs["aria-label"] || attrs["aria-labelledby"] ? undefined : "true");
+}
 const slots = useSlots();
 const instance = getCurrentInstance();
 const consumerRegistry = inject(iconRegistryKey, {});

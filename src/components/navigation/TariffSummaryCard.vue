@@ -54,7 +54,7 @@ import { RouterLink } from "vue-router";
  * render a plain, non-interactive `<div>`.
  *
  * Props: `tariff` (required, `TariffSummary`), `label` (heading text above
- * the plan name, default `"Тариф"` — override for a non-Russian consumer),
+ * the plan name, optional localized consumer copy),
  * `to` (`RouteLocationRaw`, default `null` — when set, the card renders as
  * a `RouterLink` to it; the consuming app owns what that route is).
  * Slots: none.
@@ -69,7 +69,7 @@ const props = defineProps({
   },
   label: {
     type: String,
-    default: "Тариф",
+    default: undefined,
   },
   /** @type {import("vue").PropType<import("vue-router").RouteLocationRaw | null>} */
   to: {

@@ -41,6 +41,7 @@
 </template>
 
 <script setup>
+import { useCopyDiagnostics } from "../composables/useCopyDiagnostics.js";
 /**
  * Public message composer.
  *
@@ -287,5 +288,10 @@ onBeforeUnmount(() => {
 
 defineExpose({
     focus: () => textareaRef.value?.focus?.(),
+});
+
+useCopyDiagnostics("MessageComposer", {
+  "textareaAriaLabel": () => props.textareaAriaLabel,
+  "submitAriaLabel": () => props.submitAriaLabel,
 });
 </script>

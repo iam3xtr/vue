@@ -41,9 +41,8 @@ import Loader from "./Loader.vue";
  * `loading` does not render `title`/`message` as visible text next to the
  * spinner; instead it forwards them to `Loader`'s `label` (accessible name
  * only) — `title` takes priority, `message` is the fallback, and with
- * neither set `Loader` keeps its own documented default label. Pass
- * translated strings for a non-Russian consumer; this component introduces
- * no package locale of its own.
+ * neither set Loader diagnoses missing copy in development. This component
+ * introduces no package locale of its own.
  *
  * Accessibility: `error` is the only variant that interrupts with new
  * information, so it gets `role="alert"`/`aria-live="assertive"`; the rest
@@ -80,7 +79,6 @@ const props = defineProps({
 
 const role = computed(() => (props.variant === "error" ? "alert" : "status"));
 const ariaLive = computed(() => (props.variant === "error" ? "assertive" : "polite"));
-// `undefined` (not `null`) so an absent title/message falls through to
-// `Loader`'s own documented default label instead of overriding it.
+// Forward consumer copy only; Loader diagnoses a missing loading name.
 const loaderLabel = computed(() => props.title || props.message || undefined);
 </script>

@@ -21,6 +21,7 @@
 </template>
 
 <script setup>
+import { useCopyDiagnostics } from "../composables/useCopyDiagnostics.js";
 import { computed, onBeforeUnmount, ref } from "vue";
 
 /**
@@ -31,8 +32,8 @@ import { computed, onBeforeUnmount, ref } from "vue";
  *
  * Props: `text` (String/Number, the value copied — and, with no default
  * slot content, also displayed), `buttonLabel`/`copiedLabel` (accessible
- * name and visible sr-only text before/after a successful copy — override
- * for a non-Russian consumer), `title` (tooltip; falls back to
+ * name and sr-only text before/after a successful copy — both required
+ * consumer-owned copy, with development diagnostics when absent), `title` (tooltip; falls back to
  * `buttonLabel`), `disabled`.
  * Slot: default — optional formatted content to display instead of raw
  * `text`.
@@ -48,11 +49,11 @@ const props = defineProps({
   },
   buttonLabel: {
     type: String,
-    default: "Копировать",
+    default: undefined,
   },
   copiedLabel: {
     type: String,
-    default: "Скопировано!",
+    default: undefined,
   },
   title: {
     type: String,
@@ -95,5 +96,10 @@ async function copyToClipboard() {
 
 onBeforeUnmount(() => {
   clearTimeout(copiedTimer);
+});
+
+useCopyDiagnostics("CopyPre", {
+  "buttonLabel": () => props.buttonLabel,
+  "copiedLabel": () => props.copiedLabel,
 });
 </script>

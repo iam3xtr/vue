@@ -52,6 +52,7 @@
 </template>
 
 <script setup>
+import { useCopyDiagnostics } from "../composables/useCopyDiagnostics.js";
 import { computed, h, onBeforeUnmount, onMounted, ref, useSlots, watch } from "vue";
 
 import { useFocusTrap } from "../composables/useFocusTrap.js";
@@ -72,8 +73,8 @@ import { useFocusTrap } from "../composables/useFocusTrap.js";
  * while a save is in flight; does not by itself disable body/footer
  * controls, see below), `disabled` (Boolean — also suppresses `submit`
  * emission, e.g. for a permission-denied form), `closeAriaLabel` (String,
- * default `"Закрыть"` — accessible name of the header close button;
- * override for a non-Russian consumer).
+ * required localized accessible name of the close button;
+ * missing/blank text warns in development).
  *
  * Events: `update:modelValue` (Boolean — always `false`; emitted only after
  * a user-initiated close (Escape, backdrop click, header close button or
@@ -192,7 +193,7 @@ const props = defineProps({
   },
   closeAriaLabel: {
     type: String,
-    default: "Закрыть",
+    default: undefined,
   },
 });
 
@@ -312,4 +313,8 @@ function handleSubmit(event) {
   if (props.shell || props.busy || props.disabled) return;
   emit("submit", event);
 }
+
+useCopyDiagnostics("FormDrawer", {
+  "closeAriaLabel": () => props.closeAriaLabel,
+});
 </script>

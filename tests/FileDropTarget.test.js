@@ -133,7 +133,7 @@ describe("FileDropTarget", () => {
     const overlay = wrapper.find(".tr-file-drop-target__overlay");
     expect(overlay.attributes("role")).toBe("status");
     expect(overlay.attributes("aria-live")).toBe("polite");
-    expect(overlay.text()).toBe("Отпустите файлы, чтобы загрузить");
+    expect(overlay.text()).toBe("");
   });
 
   it("accepts a custom overlay label", async () => {

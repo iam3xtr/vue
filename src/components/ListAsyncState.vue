@@ -1,5 +1,5 @@
 <template>
-  <AsyncState v-if="loading" variant="loading" />
+  <AsyncState v-if="loading" variant="loading" :title="loadingLabel" />
 
   <AsyncState
     v-else-if="error"
@@ -65,6 +65,8 @@ import AsyncState from "./AsyncState.vue";
 
 defineProps({
   loading: Boolean,
+  /** Required localized announcement when loading is true. */
+  loadingLabel: String,
   error: Boolean,
   errorIcon: { type: String, default: null },
   errorTitle: { type: String, default: null },

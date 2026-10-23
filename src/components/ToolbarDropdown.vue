@@ -40,6 +40,7 @@
 </template>
 
 <script setup>
+import { useCopyDiagnostics } from "../composables/useCopyDiagnostics.js";
 import { computed, nextTick, onMounted, ref, useTemplateRef } from "vue";
 
 import {
@@ -180,4 +181,9 @@ const onActiveChange = async (next) => {
   // dropdown is itself a child of another deferred mount.
   if (next) await nextTick();
 };
+
+useCopyDiagnostics("ToolbarDropdown", {
+  "ariaLabel or allLabel": () => props.ariaLabel || props.allLabel,
+  "allLabel": () => props.allLabel,
+});
 </script>

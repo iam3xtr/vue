@@ -15,6 +15,7 @@
 </template>
 
 <script setup>
+import { useCopyDiagnostics } from "../composables/useCopyDiagnostics.js";
 import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 
 /** @typedef {"navbar" | "page"} SearchPriority */
@@ -93,5 +94,9 @@ onBeforeUnmount(() => {
   if (typeof window !== "undefined") {
     window.removeEventListener("keydown", handleSearchShortcut);
   }
+});
+
+useCopyDiagnostics("ToolbarSearch", {
+  "ariaLabel or placeholder": () => props.ariaLabel || props.placeholder,
 });
 </script>
