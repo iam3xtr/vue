@@ -40,8 +40,22 @@
         @keydown.esc="onEscape"
         @keyup.esc="onEscapeUp"
       >
+        <input
+          v-if="searchable"
+          ref="searchRef"
+          v-model="query"
+          type="search"
+          class="input tr-filter-select__search"
+          autocomplete="off"
+          :aria-label="searchLabel"
+          :placeholder="searchPlaceholder"
+          :aria-controls="listboxId"
+          :disabled="disabled || loading"
+          @keydown="onSearchKeydown"
+        >
         <div
           :id="listboxId"
+          ref="listRef"
           role="listbox"
           :aria-label="ariaLabel"
           :aria-multiselectable="multiple ? 'true' : undefined"
@@ -49,12 +63,12 @@
           @keydown="onListKeydown"
         >
           <button
-            v-for="option in normalizedOptions"
+            v-for="option in visibleOptions"
             :key="option.value"
             type="button"
             role="option"
             class="tr-filter-select__option"
-            :class="{ 'is-selected': isSelected(option.value) }"
+            :class="{ 'is-selected': isSelected(option.value), 'is-historical': option.historical }"
             :data-value="option.value"
             :aria-selected="isSelected(option.value) ? 'true' : 'false'"
             :disabled="disabled || loading || option.disabled"
@@ -65,10 +79,18 @@
             <span>{{ option.label }}</span>
             <span v-if="isSelected(option.value)" aria-hidden="true">✓</span>
           </button>
-          <p v-if="loading || !normalizedOptions.length" class="tr-filter-select__state">
-            {{ loading ? loadingLabel : emptyLabel }}
-          </p>
+          <p v-if="stateText" class="tr-filter-select__state">{{ stateText }}</p>
         </div>
+        <button
+          v-if="allowCustom && candidateText"
+          type="button"
+          class="tr-filter-select__custom"
+          :disabled="disabled || loading"
+          @click.stop="commitCustom()"
+        >{{ customLabel?.replaceAll("{value}", candidateText) }}</button>
+        <p v-if="customError" class="tr-filter-select__state" role="alert">
+          {{ customError === "duplicate" ? customDuplicateLabel : customInvalidLabel }}
+        </p>
         <button
           type="button"
           class="tr-filter-select__reset"
@@ -102,9 +124,25 @@ import { POSITIONS, resolveDropdownPlacement, useDropdownOverlay } from "../comp
  * A single pick closes/returns focus; a multi pick stays open. Reset emits only
  * when nonempty and returns focus to the trigger. Disabled/loading block commits.
  *
+ * Optional search (searchable): case-insensitive local substring match of the
+ * trimmed query against option label and value; the query never changes the
+ * selection, resets on close and an empty query shows all options. Selected IDs
+ * absent from the catalog are listed first as historical entries (searchable or
+ * allowCustom only) so multi selections can remove them; reset removes any.
+ * Search never auto-selects: Enter in the field commits only through the opt-in
+ * allowCustom path; ArrowDown moves focus to the list. Keys during IME
+ * composition are ignored and Enter never submits an enclosing form.
+ * Custom entry (allowCustom): an explicit Enter or click on the add row passes
+ * the query through normalizeCustom (default trim) and validateCustom (default
+ * nonempty); invalid or already-selected values emit nothing and show copy. A
+ * value equal to an unselected catalog option selects that option. Multi appends
+ * and stays open; single closes.
+ *
  * Required consumer copy: ariaLabel (trigger/listbox), placeholder, resetLabel,
  * selectedCountLabel (multiple selection; template with {count}), emptyLabel when
- * options are empty and loadingLabel while loading. No language defaults. Missing
+ * options are empty and loadingLabel while loading; searchLabel and
+ * noResultsLabel when searchable; customLabel ("{value}" template),
+ * customInvalidLabel and customDuplicateLabel when allowCustom. No language defaults. Missing
  * names warn in development. Option labels and selected IDs are consumer data.
  * Selection is announced through aria-selected and a polite consumer-owned status.
  * Native buttons use roving focus: arrows/Home/End move without selecting;
@@ -125,6 +163,16 @@ const props = defineProps({
   selectedCountLabel: String,
   emptyLabel: String,
   loadingLabel: String,
+  searchable: Boolean,
+  searchLabel: String,
+  searchPlaceholder: String,
+  noResultsLabel: String,
+  allowCustom: Boolean,
+  customLabel: String,
+  customInvalidLabel: String,
+  customDuplicateLabel: String,
+  normalizeCustom: { type: Function, default: undefined },
+  validateCustom: { type: Function, default: undefined },
 });
 const emit = defineEmits(["update:modelValue"]);
 const uniqueValues = (values) => [...new Set(values.filter((v) => typeof v === "string" && v.length > 0))];
@@ -140,6 +188,51 @@ const normalizedOptions = computed(() => {
     return true;
   });
 });
+const query = ref("");
+const customError = ref(null);
+watch(query, () => { customError.value = null; });
+const needle = computed(() => query.value.trim().toLocaleLowerCase());
+const showHistorical = computed(() => props.searchable || props.allowCustom);
+const visibleOptions = computed(() => {
+  const known = new Set(normalizedOptions.value.map((option) => option.value));
+  const historical = showHistorical.value
+    ? selectedValues.value.filter((value) => !known.has(value)).map((value) => ({ value, label: value, historical: true }))
+    : [];
+  const all = [...historical, ...normalizedOptions.value];
+  if (!props.searchable || !needle.value) return all;
+  return all.filter((option) => option.label.toLocaleLowerCase().includes(needle.value)
+    || option.value.toLocaleLowerCase().includes(needle.value));
+});
+const stateText = computed(() => {
+  if (props.loading) return props.loadingLabel;
+  if (!normalizedOptions.value.length && !visibleOptions.value.length) return props.emptyLabel;
+  if (props.searchable && needle.value && !visibleOptions.value.length) return props.noResultsLabel;
+  return "";
+});
+const candidateText = computed(() => {
+  if (!needle.value) return "";
+  const raw = props.normalizeCustom ? props.normalizeCustom(query.value) : query.value.trim();
+  return typeof raw === "string" ? raw : "";
+});
+function commitCustom() {
+  if (props.disabled || props.loading || !props.allowCustom) return;
+  const value = candidateText.value;
+  const valid = value.length > 0 && (props.validateCustom ? props.validateCustom(value) === true : true);
+  if (!valid) { customError.value = "invalid"; return; }
+  if (isSelected(value)) { customError.value = "duplicate"; return; }
+  const existing = normalizedOptions.value.find((option) => option.value === value);
+  if (existing?.disabled) { customError.value = "invalid"; return; }
+  customError.value = null;
+  query.value = "";
+  if (existing) { select(existing); return; }
+  if (props.multiple) {
+    emit("update:modelValue", [...selectedValues.value, value]);
+    nextTick(() => searchRef.value?.focus());
+  } else {
+    emit("update:modelValue", value);
+    close();
+  }
+}
 const selectedLabels = computed(() => selectedValues.value.map((value) =>
   normalizedOptions.value.find((option) => option.value === value)?.label ?? value));
 const selectionText = computed(() => {
@@ -175,7 +268,9 @@ const isActive = ref(false);
 const focusValue = ref(null);
 const listboxId = `filter-select-${useId()}`;
 let focusLast = false;
-const enabledOptions = computed(() => normalizedOptions.value.filter((o) => !o.disabled));
+const searchRef = ref(null);
+const listRef = ref(null);
+const enabledOptions = computed(() => visibleOptions.value.filter((o) => !o.disabled));
 function focusOption(value) {
   focusValue.value = value;
   nextTick(() => {
@@ -183,9 +278,31 @@ function focusOption(value) {
     [...buttons].find((button) => button.dataset.value === value)?.focus();
   });
 }
+const composing = (event) => event.isComposing || event.keyCode === 229;
+function onSearchKeydown(event) {
+  if (composing(event)) return;
+  if (event.key === "Enter") {
+    event.preventDefault();
+    event.stopPropagation();
+    if (props.allowCustom) commitCustom();
+  } else if (event.key === "ArrowDown") {
+    event.preventDefault();
+    event.stopPropagation();
+    const options = enabledOptions.value;
+    const target = options.find((o) => isSelected(o.value)) ?? options[0];
+    if (target) focusOption(target.value);
+  }
+}
 function onListKeydown(event) {
-  if (event.isComposing) return;
+  if (composing(event)) return;
   const options = enabledOptions.value;
+  if (event.key === "ArrowUp" && props.searchable
+    && (!options.length || options[0].value === focusValue.value)) {
+    event.preventDefault();
+    event.stopPropagation();
+    searchRef.value?.focus();
+    return;
+  }
   if (!options.length) return;
   const index = options.findIndex((o) => o.value === focusValue.value);
   let target;
@@ -214,7 +331,7 @@ function open(last = false) {
 }
 let escapeConsumed = false;
 function onEscape(event) {
-  if (!isActive.value) return;
+  if (!isActive.value || composing(event)) return;
   event.preventDefault();
   event.stopPropagation();
   escapeConsumed = true;
@@ -243,7 +360,8 @@ async function onActiveChange(value) {
   isActive.value = !!value;
   await nextTick();
   refreshRefs();
-  if (!value) return;
+  if (!value) { query.value = ""; customError.value = null; return; }
+  if (props.searchable && !focusLast) { searchRef.value?.focus(); return; }
   const options = enabledOptions.value;
   const chosen = options.find((o) => isSelected(o.value));
   const target = focusLast ? options.at(-1) : (chosen ?? options[0]);
@@ -254,7 +372,7 @@ async function onActiveChange(value) {
 watch(() => props.disabled || props.loading, (blocked) => { if (blocked) close(); });
 watch(enabledOptions, (options) => {
   if (options.some((o) => o.value === focusValue.value)) return;
-  const hadFocus = typeof document !== "undefined" && popupRef.value?.contains(document.activeElement);
+  const hadFocus = typeof document !== "undefined" && listRef.value?.contains(document.activeElement);
   focusValue.value = options[0]?.value ?? null;
   if (isActive.value && hadFocus && focusValue.value) focusOption(focusValue.value);
 });
@@ -271,6 +389,11 @@ useCopyDiagnostics("FilterSelect", {
   resetLabel: () => props.resetLabel,
   selectedCountLabel: () => !props.multiple || !selectedValues.value.length || props.selectedCountLabel,
   emptyLabel: () => props.loading || normalizedOptions.value.length > 0 || props.emptyLabel,
+  searchLabel: () => !props.searchable || props.searchLabel,
+  noResultsLabel: () => !props.searchable || props.noResultsLabel,
+  customLabel: () => !props.allowCustom || props.customLabel,
+  customInvalidLabel: () => !props.allowCustom || props.customInvalidLabel,
+  customDuplicateLabel: () => !props.allowCustom || props.customDuplicateLabel,
   loadingLabel: () => !props.loading || props.loadingLabel,
 });
 </script>

@@ -158,3 +158,116 @@ describe("FilterSelect keyboard/copy/overlay", () => {
     expect(menu.classList.contains("tr-dropdown-overlay")).toBe(false);
   });
 });
+
+const search = { searchable: true, searchLabel: "Search providers", noResultsLabel: "No matches" };
+const custom = { allowCustom: true, customLabel: "Use {value}", customInvalidLabel: "Invalid value", customDuplicateLabel: "Already selected" };
+const field = (wrapper) => wrapper.find(".tr-filter-select__search");
+async function type(wrapper, value) { await field(wrapper).setValue(value); await nextTick(); }
+
+describe("FilterSelect search and historical values", () => {
+  it("matches label or value locally, keeps selection, and resets the query on close", async () => {
+    const wrapper = render({ ...search, modelValue: "a" }); await open(wrapper);
+    expect(document.activeElement).toBe(field(wrapper).element);
+    await type(wrapper, " BET ");
+    expect(items(wrapper).map((i) => i.text())).toEqual(["Beta"]);
+    await type(wrapper, "off");
+    expect(items(wrapper)).toHaveLength(1);
+    await type(wrapper, "zzz");
+    expect(items(wrapper)).toHaveLength(0);
+    expect(wrapper.find(".tr-filter-select__state").text()).toBe("No matches");
+    await type(wrapper, "");
+    expect(items(wrapper)).toHaveLength(3);
+    await field(wrapper).trigger("keydown", { key: "Escape" }); await settle();
+    expect(wrapper.emitted("update:modelValue")).toBeUndefined();
+    await open(wrapper);
+    expect(field(wrapper).element.value).toBe("");
+  });
+  it("Enter and ArrowDown in the field never select; Enter does not submit a form", async () => {
+    const submit = vi.fn();
+    const host = mount({ render: () => h("form", { onSubmit: (e) => { e.preventDefault(); submit(); } }, [h(FilterSelect, { ...copy, ...search, options })]) },
+      { attachTo: document.body, global: { plugins: [Buefy] } });
+    mounted.push(host);
+    const wrapper = host.findComponent(FilterSelect); await open(wrapper);
+    await type(wrapper, "alp");
+    const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    field(wrapper).element.dispatchEvent(enter);
+    expect(enter.defaultPrevented).toBe(true);
+    await field(wrapper).trigger("keydown", { key: "ArrowDown" }); await nextTick();
+    expect(document.activeElement).toBe(items(wrapper)[0].element);
+    expect(wrapper.emitted("update:modelValue")).toBeUndefined();
+    expect(submit).not.toHaveBeenCalled();
+    await items(wrapper)[0].trigger("keydown", { key: "ArrowUp" }); await nextTick();
+    expect(document.activeElement).toBe(field(wrapper).element);
+  });
+  it("works in multi mode and shows historical IDs that can be removed and reintroduced", async () => {
+    const wrapper = render({ ...search, multiple: true, modelValue: ["gone", "a"] }); await open(wrapper);
+    expect(items(wrapper).map((i) => i.text())).toEqual(["gone✓", "Alpha✓", "Off", "Beta"]);
+    await items(wrapper)[0].trigger("click");
+    expect(wrapper.emitted("update:modelValue")[0][0]).toEqual(["a"]);
+    await wrapper.setProps({ options: [...options, { value: "gone", label: "Gone back" }] });
+    expect(items(wrapper).map((i) => i.text())).toContain("Gone back✓");
+    expect(items(wrapper).filter((i) => i.classes("is-historical"))).toHaveLength(0);
+    await type(wrapper, "gone");
+    expect(items(wrapper)).toHaveLength(1);
+  });
+  it("search-off does not list historical entries or render a field", async () => {
+    const wrapper = render({ multiple: true, modelValue: ["gone"] }); await open(wrapper);
+    expect(field(wrapper).exists()).toBe(false);
+    expect(items(wrapper)).toHaveLength(3);
+  });
+  it("commits custom values only explicitly, normalized, validated and deduplicated", async () => {
+    const wrapper = render({ ...search, ...custom, multiple: true, modelValue: ["a"],
+      validateCustom: (v) => /^[a-z-]+$/.test(v) }); await open(wrapper);
+    await type(wrapper, "  new-model ");
+    expect(wrapper.emitted("update:modelValue")).toBeUndefined();
+    expect(wrapper.find(".tr-filter-select__custom").text()).toBe("Use new-model");
+    await field(wrapper).trigger("keydown", { key: "Enter" }); await settle();
+    expect(wrapper.emitted("update:modelValue")).toEqual([[["a", "new-model"]]]);
+    expect(field(wrapper).element.value).toBe("");
+    expect(trigger(wrapper).attributes("aria-expanded")).toBe("true");
+    await wrapper.setProps({ modelValue: ["a", "new-model"] });
+    await type(wrapper, "new-model");
+    await wrapper.find(".tr-filter-select__custom").trigger("click");
+    expect(wrapper.find('[role="alert"]').text()).toBe("Already selected");
+    await type(wrapper, "BAD 1");
+    await wrapper.find(".tr-filter-select__custom").trigger("click");
+    expect(wrapper.find('[role="alert"]').text()).toBe("Invalid value");
+    await type(wrapper, "b");
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    await wrapper.find(".tr-filter-select__custom").trigger("click");
+    expect(wrapper.emitted("update:modelValue")).toHaveLength(2);
+    expect(wrapper.emitted("update:modelValue")[1][0]).toEqual(["a", "new-model", "b"]);
+  });
+  it("single custom closes with focus return and keeps the value after reset", async () => {
+    const wrapper = render({ ...custom, modelValue: null }); await open(wrapper);
+    expect(wrapper.find(".tr-filter-select__custom").exists()).toBe(false);
+    const wrapperS = render({ ...search, ...custom }); await open(wrapperS);
+    await type(wrapperS, "legacy");
+    await wrapperS.find(".tr-filter-select__custom").trigger("click"); await settle();
+    expect(wrapperS.emitted("update:modelValue")).toEqual([["legacy"]]);
+    expect(trigger(wrapperS).attributes("aria-expanded")).toBe("false");
+    await wrapperS.setProps({ modelValue: "legacy" });
+    await open(wrapperS);
+    expect(items(wrapperS)[0].classes()).toContain("is-historical");
+    await wrapperS.find(".tr-filter-select__reset").trigger("click"); await settle();
+    expect(wrapperS.emitted("update:modelValue")[1]).toEqual([null]);
+  });
+  it("selects an existing catalog option instead of creating a duplicate; ignores IME composition", async () => {
+    const wrapper = render({ ...search, ...custom, multiple: true }); await open(wrapper);
+    await type(wrapper, "b");
+    await field(wrapper).trigger("keydown", { key: "Enter", isComposing: true });
+    expect(wrapper.emitted("update:modelValue")).toBeUndefined();
+    await field(wrapper).trigger("keydown", { key: "Enter" }); await settle();
+    expect(wrapper.emitted("update:modelValue")).toEqual([[["b"]]]);
+    await type(wrapper, "x");
+    await field(wrapper).trigger("keydown", { key: "Escape", isComposing: true });
+    expect(trigger(wrapper).attributes("aria-expanded")).toBe("true");
+  });
+  it("warns about missing search and custom copy", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render({ searchable: true, allowCustom: true });
+    for (const name of ["searchLabel", "noResultsLabel", "customLabel", "customInvalidLabel", "customDuplicateLabel"]) {
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining(name));
+    }
+  });
+});
